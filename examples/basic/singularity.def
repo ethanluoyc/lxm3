@@ -1,0 +1,5 @@
+Bootstrap: docker
+From: python:3.8.16-bullseye
+
+%post
+    pip install absl-py ml-collections
