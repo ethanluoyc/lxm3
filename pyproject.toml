@@ -1,0 +1,48 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "lxm3"
+version = "0.1.0"
+description = ''
+readme = "README.md"
+requires-python = ">=3.8"
+license = "MIT"
+keywords = []
+authors = [{ name = "Yicheng Luo", email = "ethanluoyc@gmail.com" }]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: Implementation :: CPython",
+]
+dependencies = [
+  "absl-py",
+  "attrs",
+  "tabulate",
+  "termcolor",
+  "ml_collections",
+  "toml",
+  "dirhash",
+  "paramiko",
+  "appdirs"
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-xdist", "black", "ruff"]
+
+[tool.black]
+line-length = 88
+target-version = ['py38', 'py39']
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.eggs
+  | \.git
+  | docs
+  | .github
+  | third_party
+)/
+'''
