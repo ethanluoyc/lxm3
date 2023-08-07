@@ -79,7 +79,7 @@ class ClusterWorkUnit(xm.WorkUnit):
 
     def __init__(
         self,
-        experiment: xm.Experiment,
+        experiment: "ClusterExperiment",
         work_unit_id_predictor: id_predictor.Predictor,
         create_task: Callable[[Awaitable[Any]], futures.Future[Any]],
         launched_jobs: List[job_blocks.JobType],

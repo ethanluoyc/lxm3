@@ -2,7 +2,7 @@ import datetime
 import os
 import shlex
 import shutil
-from typing import List
+from typing import List, Union
 
 import termcolor
 from absl import logging
@@ -287,23 +287,9 @@ def _generate_header_from_executor(
     return "\n".join(header)
 
 
-def deploy_job_resources(fs, storage_root, jobs):
-    executable = jobs[0].executable
-    executor = jobs[0].executor
-
-    assert isinstance(executor, executors.GridEngine) or isinstance(
-        executor, executors.Local
-    )
-    assert isinstance(executable, executables.Command)
-
-    for job in jobs[1:]:
-        if job.executable != executable:
-            raise ValueError("All jobs must have the same executable.")
-        if job.executor != executor:
-            raise ValueError("All jobs must have the same executor.")
-
-    singularity_image = executor.singularity_container
+def _get_singulation_options(executor: Union[executors.GridEngine, executors.Local]):
     singularity_opts = " ".join(executor.singularity_options)
+
     if isinstance(executor, executors.GridEngine):
         if (
             "gpu" in executor.parallel_environments
@@ -314,7 +300,44 @@ def deploy_job_resources(fs, storage_root, jobs):
         if shutil.which("nvidia-smi"):
             singularity_opts += " --nv"
     else:
-        pass
+        raise ValueError(f"Unsupported executor type {type(executor)}")
+
+    return singularity_opts.strip()
+
+
+def _validate_same_job_configuration(jobs):
+    executable = jobs[0].executable
+    executor = jobs[0].executor
+    for job in jobs[1:]:
+        if job.executable != executable:
+            raise ValueError("All jobs must have the same executable.")
+        if job.executor != executor:
+            raise ValueError("All jobs must have the same executor.")
+
+
+def _create_job_header(executor, jobs, job_script_dir):
+    if isinstance(executor, executors.GridEngine):
+        job_name = jobs[0].name
+
+        job_header = _generate_header_from_executor(
+            job_name, executor, len(jobs), job_script_dir
+        )
+
+    elif isinstance(executor, executors.Local):
+        job_header = ""
+
+    return job_header
+
+
+def deploy_job_resources(fs, storage_root, jobs):
+    executable = jobs[0].executable
+    executor = jobs[0].executor
+
+    assert isinstance(executor, executors.GridEngine) or isinstance(
+        executor, executors.Local
+    )
+    assert isinstance(executable, executables.Command)
+    _validate_same_job_configuration(jobs)
 
     deploy_archive_path = deploy_resource_archive(fs, storage_root, executable)
 
@@ -343,10 +366,12 @@ def deploy_job_resources(fs, storage_root, jobs):
     setup_cmds = ["hostname"]
     job_command = " ".join(["sh", os.fspath(array_wrapper_path), "$SGE_TASK_ID"])
 
+    singularity_image = executor.singularity_container
     if singularity_image is not None:
         deploy_container_path = deploy_singularity_container(
             fs, storage_root, singularity_image
         )
+        singularity_opts = _get_singulation_options(executor)
         job_command = (
             f"singularity exec {singularity_opts} {deploy_container_path} {job_command}"
         )
@@ -355,15 +380,7 @@ def deploy_job_resources(fs, storage_root, jobs):
     job_script_path = os.path.join(job_script_dir, "job.sh")
     fs.makedirs(os.path.join(job_script_dir, "logs"), exist_ok=True)
 
-    if isinstance(executor, executors.GridEngine):
-        job_name = jobs[0].name
-
-        job_header = _generate_header_from_executor(
-            job_name, executor, len(work_list), job_script_dir
-        )
-
-    elif isinstance(executor, executors.Local):
-        job_header = ""
+    job_header = _create_job_header(executor, jobs, job_script_dir)
 
     job_script = _create_job_script(
         job_command,

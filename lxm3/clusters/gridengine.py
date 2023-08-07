@@ -1,5 +1,7 @@
 import re
 import threading
+import shlex
+import subprocess
 
 import paramiko
 
@@ -29,11 +31,12 @@ def _split_job_ids(match):
 
 
 class Client:
-    def __init__(self, hostname, username) -> None:
+    def __init__(self, hostname=None, username=None) -> None:
         self._hostname = hostname
         self._username = username
         self._ssh = None
-        self._connect()
+        if hostname is not None:
+            self._connect()
 
     def _connect(self):
         self._ssh = paramiko.SSHClient()
@@ -43,8 +46,9 @@ class Client:
         self._ssh.connect(hostname=self._hostname, username=self._username)
 
     def close(self):
-        with self._lock:
-            self._ssh.close()  # type: ignore
+        if self._ssh is None:
+            with self._lock:
+                self._ssh.close()  # type: ignore
 
     def launch(self, command):
         output = self._submit_command(command)
@@ -53,11 +57,14 @@ class Client:
         job_ids = _split_job_ids(match)
         return job_ids
 
-    def _run_command(self, command):
-        with self._lock:
-            _, stdout, _ = self._ssh.exec_command(command)  # type: ignore
-            stdout = stdout.read().decode()
-            return stdout
+    def _run_command(self, command: str):
+        if self._ssh is None:
+            return subprocess.check_output(shlex.split(command), text=True)
+        else:
+            with self._lock:
+                _, stdout, _ = self._ssh.exec_command(command)  # type: ignore
+                stdout = stdout.read().decode()
+                return stdout
 
     def _submit_command(self, command):
         return self._run_command(f"qsub {command}")
