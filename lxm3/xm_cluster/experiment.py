@@ -14,6 +14,7 @@ from lxm3._vendor.xmanager.xm import core
 from lxm3._vendor.xmanager.xm import id_predictor
 from lxm3._vendor.xmanager.xm import job_blocks
 from lxm3._vendor.xmanager.xm import pattern_matching as pm
+from lxm3.xm_cluster import config as config_lib
 from lxm3.xm_cluster import executors
 from lxm3.xm_cluster import packaging
 from lxm3.xm_cluster.execution import gridengine as gridengine_execution
@@ -150,6 +151,7 @@ class ClusterExperiment(xm.Experiment):
 
     def __init__(
         self,
+        experiment_title: str,
         local_staging_directory,
         cluster_hostname: str,
         cluster_user: str,
@@ -163,6 +165,7 @@ class ClusterExperiment(xm.Experiment):
         self._experiment_id = int(time.time() * 10**3)
         self._in_batch_lock = threading.Lock()
         self._in_batch = False
+        self._experiment_title = experiment_title
         self._local_staging_directory = local_staging_directory
         self._cluster_hostname = cluster_hostname
         self._cluster_user = cluster_user
@@ -308,15 +311,21 @@ class ClusterExperiment(xm.Experiment):
         return self._experiment_id
 
 
-def create_experiment(
-    local_staging_directory: str,
-    cluster_hostname: str,
-    cluster_user: str,
-    cluster_staging_directory: str,
-):
+def create_experiment(experiment_title: str = "", *, project=None, config=None):
+    config = config or config_lib.default()
+    default_cluster = config["clusters"][0]
+
+    if project is None:
+        project = config["project"]
+
     return ClusterExperiment(
-        local_staging_directory,
-        cluster_hostname=cluster_hostname,
-        cluster_user=cluster_user,
-        cluster_staging_directory=cluster_staging_directory,
+        experiment_title,
+        local_staging_directory=os.path.join(
+            config["local"]["storage"]["staging"], project
+        ),
+        cluster_hostname=default_cluster["server"],
+        cluster_user=default_cluster["user"],
+        cluster_staging_directory=os.path.join(
+            default_cluster["storage"]["staging"], project
+        ),
     )

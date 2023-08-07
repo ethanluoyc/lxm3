@@ -1,25 +1,23 @@
 #!/usr/bin/env python3
-
 from absl import app
 from absl import flags
 
 from lxm3 import xm
 from lxm3 import xm_cluster
-from lxm3.xm import utils
 
 _LAUNCH_ON_CLUSTER = flags.DEFINE_boolean(
     "launch_on_cluster", False, "Launch on cluster"
+)
+_SINGULARITY_CONTAINER = flags.DEFINE_string(
+    "--container", "jax-cuda.sif", "Singularity container"
 )
 
 
 def main(_):
     with xm_cluster.create_experiment(
-        local_staging_directory=".cache/lxm",
-        cluster_hostname="beaker.cs.ucl.ac.uk",
-        cluster_user="yicheluo",
-        cluster_staging_directory="/home/yicheluo/lxm-test-staging",
+        experiment_title="basic", project="basic"
     ) as experiment:
-        singularity_container = utils.resolve_path_relative_to_launcher("jax-gpu.sif")
+        singularity_container = _SINGULARITY_CONTAINER.value
         requirements = xm_cluster.JobRequirements(gpu=1, tmem="8G")
         if _LAUNCH_ON_CLUSTER.value:
             executor = xm_cluster.GridEngine(

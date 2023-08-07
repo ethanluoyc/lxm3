@@ -24,7 +24,7 @@ dependencies = [
   "tabulate",
   "termcolor",
   "ml_collections",
-  "toml",
+  "tomli",
   "dirhash",
   "paramiko",
   "appdirs",

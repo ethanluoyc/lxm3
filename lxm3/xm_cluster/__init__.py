@@ -8,3 +8,4 @@ from lxm3.xm_cluster.executors import Local
 from lxm3.xm_cluster.experiment import ClusterExperiment
 from lxm3.xm_cluster.experiment import create_experiment
 from lxm3.xm_cluster.requirements import JobRequirements
+from lxm3.xm_cluster.config import Config

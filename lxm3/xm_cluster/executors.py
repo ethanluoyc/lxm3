@@ -3,6 +3,7 @@ from typing import Dict, Optional, Sequence, Union
 import attr
 
 from lxm3 import xm
+from lxm3.xm import utils
 from lxm3.xm_cluster.requirements import JobRequirements
 
 
@@ -21,6 +22,12 @@ class Local(xm.Executor):
     singularity_options: Sequence[str] = attr.Factory(list)
 
     Spec = LocalSpec  # type: ignore
+
+    def __attrs_post_init__(self):
+        if self.singularity_container is not None:
+            self.singularity_container = utils.resolve_path_relative_to_launcher(
+                self.singularity_container
+            )
 
 
 @attr.s(auto_attribs=True)
@@ -50,3 +57,9 @@ class GridEngine(xm.Executor):
     singularity_options: Sequence[str] = attr.Factory(list)
 
     Spec = GridEngineSpec  # type: ignore
+
+    def __attrs_post_init__(self):
+        if self.singularity_container is not None:
+            self.singularity_container = utils.resolve_path_relative_to_launcher(
+                self.singularity_container
+            )
