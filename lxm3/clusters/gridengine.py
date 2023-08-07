@@ -33,7 +33,6 @@ class Client:
         self._hostname = hostname
         self._username = username
         self._ssh = None
-        self._job_state = {}
         self._connect()
 
     def _connect(self):
@@ -42,11 +41,9 @@ class Client:
         self._ssh.load_system_host_keys()
         self._lock = threading.Lock()
         self._ssh.connect(hostname=self._hostname, username=self._username)
-        self._stop_event = threading.Event()
 
     def close(self):
         with self._lock:
-            self._stop_event.set()
             self._ssh.close()  # type: ignore
 
     def launch(self, command):

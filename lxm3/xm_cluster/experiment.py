@@ -311,9 +311,21 @@ class ClusterExperiment(xm.Experiment):
         return self._experiment_id
 
 
-def create_experiment(experiment_title: str = "", *, project=None, config=None):
+def create_experiment(
+    experiment_title: str = "",
+    *,
+    project=None,
+    cluster=None,
+    config=None,
+):
     config = config or config_lib.default()
-    default_cluster = config["clusters"][0]
+    if cluster is not None:
+        for cluster_config in config["clusters"]:
+            if cluster_config["name"] == cluster:
+                break
+        raise ValueError(f"Cluster {cluster} not found in config")
+    else:
+        cluster_config = config["clusters"][0]
 
     if project is None:
         project = config["project"]
@@ -323,9 +335,9 @@ def create_experiment(experiment_title: str = "", *, project=None, config=None):
         local_staging_directory=os.path.join(
             config["local"]["storage"]["staging"], project
         ),
-        cluster_hostname=default_cluster["server"],
-        cluster_user=default_cluster["user"],
+        cluster_hostname=cluster_config["server"],
+        cluster_user=cluster_config["user"],
         cluster_staging_directory=os.path.join(
-            default_cluster["storage"]["staging"], project
+            cluster_config["storage"]["staging"], project
         ),
     )
