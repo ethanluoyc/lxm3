@@ -49,6 +49,9 @@ class GridEngine(xm.Executor):
     merge_output: bool = True
     shell: str = "/bin/bash"
 
+    project: Optional[str] = None
+    account: Optional[str] = None
+
     max_parallel_tasks: Optional[int] = None
     extra_directives: Sequence[str] = attr.Factory(list)
     skip_directives: Sequence[str] = attr.Factory(list)

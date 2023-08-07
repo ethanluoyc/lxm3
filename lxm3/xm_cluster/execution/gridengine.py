@@ -265,6 +265,12 @@ def _generate_header_from_executor(
 
     header.append(f"#$ -S {executor.shell}")
 
+    if executor.project:
+        header.append(f"#$ -P {executor.project}")
+
+    if executor.account:
+        header.append(f"#$ -A {executor.account}")
+
     # Skip requested header directives
     header = list(
         filter(
