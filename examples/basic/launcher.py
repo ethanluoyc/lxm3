@@ -5,11 +5,24 @@ from absl import flags
 from ml_collections import config_flags
 
 from lxm3 import xm
+import os
 from lxm3 import xm_cluster
 from lxm3.xm import utils
 
 _LAUNCH_ON_CLUSTER = flags.DEFINE_boolean(
     "launch_on_cluster", False, "Launch on cluster"
+)
+_CLUSTER_HOSTNAME = flags.DEFINE_string(
+    "cluster_hostname", os.environ.get("LXM_CLUSTER_HOSTNAME"), ""
+)
+_CLUSTER_USER = flags.DEFINE_string(
+    "cluster_user", os.environ.get("LXM_CLUSTER_USER"), ""
+)
+_CLUSTER_STAGING_DIR = flags.DEFINE_string(
+    "cluster_staging_directory", os.environ.get("LXM_CLUSTER_STAGING_DIR"), ""
+)
+_LOCAL_STAGING_DIR = flags.DEFINE_string(
+    "local_staging_directory", os.environ.get("LXM_LOCAL_STAGING_DIR"), ""
 )
 _NUM_TASKS = flags.DEFINE_integer("num_tasks", 1, "Number of tasks to launch")
 config_flags.DEFINE_config_file("config", None)
@@ -18,10 +31,10 @@ flags.mark_flag_as_required("config")
 
 def main(_):
     with xm_cluster.create_experiment(
-        local_staging_directory=".cache/lxm",
-        cluster_hostname="beaker.cs.ucl.ac.uk",
-        cluster_user="yicheluo",
-        cluster_staging_directory="/home/yicheluo/lxm-test-staging",
+        local_staging_directory=_LOCAL_STAGING_DIR.value,
+        cluster_hostname=_CLUSTER_HOSTNAME.value,
+        cluster_user=_CLUSTER_USER.value,
+        cluster_staging_directory=_CLUSTER_STAGING_DIR.value,
     ) as experiment:
         singularity_container = utils.resolve_path_relative_to_launcher("image.sif")
         requirements = xm_cluster.JobRequirements(tmem="1G", h_vmem="1G")

@@ -56,6 +56,11 @@ async def _launch(jobs):
         fs = fsspec.filesystem(
             "sftp", host=experiment._cluster_hostname, username=experiment._cluster_user
         )
+
+        # Normalize the storage root to an absolute path.
+        if not os.path.isabs(storage_root):
+            storage_root = fs.ftp.normalize(storage_root)
+
         non_local_handles.extend(
             await gridengine_execution.launch(
                 experiment._cluster_hostname,

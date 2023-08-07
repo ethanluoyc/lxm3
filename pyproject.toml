@@ -27,7 +27,8 @@ dependencies = [
   "toml",
   "dirhash",
   "paramiko",
-  "appdirs"
+  "appdirs",
+  "fsspec",
 ]
 
 [project.optional-dependencies]
