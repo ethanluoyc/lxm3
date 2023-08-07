@@ -27,6 +27,7 @@ staging = "/home/bar/Scratch/lxm3-staging"
 
 """
 
+
 class ConfigTest(parameterized.TestCase):
     def test_config(self):
         config = config_lib.Config.from_string(_SAMPLE_CONFIG)
