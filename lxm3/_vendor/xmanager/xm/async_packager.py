@@ -16,7 +16,7 @@
 import asyncio
 import concurrent.futures as concurrent_futures
 import threading
-from typing import Awaitable, Callable, Sequence, TypeVar
+from typing import Awaitable, Callable, Sequence, TypeVar, Union
 
 from lxm3._vendor.xmanager.xm import job_blocks
 
@@ -34,7 +34,7 @@ class PicklableAwaitableImpl:
   def __init__(
       self,
       get_future: Callable[
-          [], asyncio.Future[Awaited] | concurrent_futures.Future[Awaited]
+          [], Union[asyncio.Future[Awaited], concurrent_futures.Future[Awaited]]
       ],
   ):
     self._get_future = get_future

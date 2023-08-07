@@ -40,7 +40,7 @@ dependencies = [
 ]
 [tool.hatch.envs.default.scripts]
 test = "pytest {args:tests lxm3}"
-test-cov = "coverage run -m pytest {args:tests}"
+test-cov = "coverage run -m pytest {args:tests lxm3}"
 cov-report = [
   "- coverage combine",
   "coverage report",
@@ -101,3 +101,16 @@ single-line-exclusions = ["typing"]
 
 [tool.ruff.flake8-tidy-imports]
 ban-relative-imports = "all"
+
+[tool.coverage.paths]
+source = ["lxm3", "*/lxm3/lxm3"]
+
+[tool.coverage.run]
+omit = ["lxm3/_vendor/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+  "no cov",
+  "if __name__ == .__main__.:",
+  "if TYPE_CHECKING:",
+]
