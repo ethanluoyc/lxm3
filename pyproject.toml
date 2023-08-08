@@ -21,17 +21,18 @@ classifiers = [
 dependencies = [
   "absl-py",
   "attrs",
-  "tabulate",
-  "termcolor",
   "ml_collections",
   "tomli",
-  "dirhash",
   "paramiko",
   "appdirs",
   "fsspec",
   "async_generator",
   "immutabledict",
+  "rich",
 ]
+
+[project.scripts]
+lxm3 = "lxm3.cli.cli:entrypoint"
 
 [tool.hatch.envs.default]
 dependencies = [
@@ -85,6 +86,7 @@ exclude = '''
   | .github
   | third_party
   | _vendor
+  | scratch
 )/
 '''
 

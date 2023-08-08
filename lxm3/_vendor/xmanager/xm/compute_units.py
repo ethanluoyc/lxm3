@@ -27,4 +27,9 @@ MB = 10**6  # megabyte
 GB = 10**9  # gigabyte
 TB = 10**12  # terabyte
 PB = 10**15  # petabyte
+
+# Time units
+Sec = 1
+Min = 60
+Hr = 60 * 60
 # pylint: enable=invalid-name

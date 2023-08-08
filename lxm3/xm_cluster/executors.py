@@ -8,6 +8,16 @@ from lxm3.xm_cluster.requirements import JobRequirements
 
 
 @attr.s(auto_attribs=True)
+class SingularityOptions(xm.ExecutorSpec):
+    """Options for singularity container."""
+
+    # Dict of the form {host_path: container_path}
+    bind: Optional[Dict[str, str]] = None
+    # Extra commandline options to pass to singularity
+    extra_options: Sequence[str] = attr.Factory(list)
+
+
+@attr.s(auto_attribs=True)
 class LocalSpec(xm.ExecutorSpec):
     """Spec for local execution."""
 
@@ -19,7 +29,7 @@ class Local(xm.Executor):
     requirements: JobRequirements = attr.Factory(JobRequirements)
 
     singularity_container: Optional[str] = None
-    singularity_options: Sequence[str] = attr.Factory(list)
+    singularity_options: Optional[SingularityOptions] = None
 
     Spec = LocalSpec  # type: ignore
 
@@ -57,7 +67,7 @@ class GridEngine(xm.Executor):
     skip_directives: Sequence[str] = attr.Factory(list)
 
     singularity_container: Optional[str] = None
-    singularity_options: Sequence[str] = attr.Factory(list)
+    singularity_options: Optional[SingularityOptions] = None
 
     Spec = GridEngineSpec  # type: ignore
 

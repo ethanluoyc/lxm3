@@ -9,13 +9,13 @@ import tempfile
 import zipfile
 from typing import Any, List
 
-import termcolor
 from absl import logging
 
 from lxm3 import xm
 from lxm3._vendor.xmanager.xm import pattern_matching
-from lxm3.xm_cluster import executable_specs as local_executable_specs
-from lxm3.xm_cluster import executables as local_executables
+from lxm3.xm_cluster import executable_specs as cluster_executable_specs
+from lxm3.xm_cluster import executables as cluster_executables
+from lxm3.xm_cluster.console import console
 
 
 @functools.lru_cache()
@@ -35,67 +35,65 @@ def _create_archive(staging_directory, package_name, version, package_dir, resou
     archive_name = f"{package_name}-{version}"
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        print(
-            termcolor.colored(
-                "Creating python package archive for {}".format(package_dir), "cyan"
-            )
-        )
-        try:
-            process = subprocess.run(
-                [
-                    "pip",
-                    "install",
-                    "--no-deps",
-                    "--no-compile",
-                    "-t",
-                    tmpdir,
-                    package_dir,
-                ],
-                text=True,
-                check=True,
-                capture_output=True,
-            )
-        except subprocess.CalledProcessError:
-            raise RuntimeError(
-                "Failed to package python package: {}. stdout\n{}\nstderr{}".format(
-                    package_dir, process.stdout, process.stderr
+        with console.status(
+            "Creating python package archive for {}".format(package_dir)
+        ):
+            try:
+                process = subprocess.run(
+                    [
+                        "pip",
+                        "install",
+                        "--no-deps",
+                        "--no-compile",
+                        "-t",
+                        tmpdir,
+                        package_dir,
+                    ],
+                    text=True,
+                    check=True,
+                    capture_output=True,
                 )
-            )
-
-        # Add resources to the archive
-        for resource in resources:
-            for src, dst in resource.files:
-                target_file = os.path.join(tmpdir, dst)
-                if not os.path.exists(os.path.dirname(target_file)):
-                    os.makedirs(os.path.dirname(target_file))
-                if not os.path.exists(target_file):
-                    shutil.copy(src, target_file)
-                else:
-                    raise ValueError(
-                        "Additional resource overwrites existing file: %s", src
+            except subprocess.CalledProcessError:
+                raise RuntimeError(
+                    "Failed to package python package: {}. stdout\n{}\nstderr{}".format(
+                        package_dir, process.stdout, process.stderr
                     )
-
-        if os.path.exists(os.path.join(tmpdir, "bin")):
-            print(
-                termcolor.colored(
-                    'Removing "bin/" directory as these are not yet portable.', "yellow"
                 )
+
+            # Add resources to the archive
+            for resource in resources:
+                for src, dst in resource.files:
+                    target_file = os.path.join(tmpdir, dst)
+                    if not os.path.exists(os.path.dirname(target_file)):
+                        os.makedirs(os.path.dirname(target_file))
+                    if not os.path.exists(target_file):
+                        shutil.copy(src, target_file)
+                    else:
+                        raise ValueError(
+                            "Additional resource overwrites existing file: %s", src
+                        )
+
+            if os.path.exists(os.path.join(tmpdir, "bin")):
+                console.log('Removing "bin/" directory as these are not yet portable.')
+                shutil.rmtree(os.path.join(tmpdir, "bin"))
+
+            for f in glob.glob(os.path.join(tmpdir, "*.dist-info")):
+                shutil.rmtree(f)
+
+            archive_name = shutil.make_archive(
+                os.path.join(staging_directory, archive_name),
+                "zip",
+                tmpdir,
+                verbose=True,
             )
-            shutil.rmtree(os.path.join(tmpdir, "bin"))
-
-        for f in glob.glob(os.path.join(tmpdir, "*.dist-info")):
-            shutil.rmtree(f)
-
-        archive_name = shutil.make_archive(
-            os.path.join(staging_directory, archive_name), "zip", tmpdir, verbose=True
-        )
+        console.log(f"Created archive: [repr.path]{os.path.basename(archive_name)}[repr.path]")
         return os.path.basename(archive_name)
 
 
-def _create_entrypoint_cmds(python_package: local_executable_specs.PythonPackage):
-    if isinstance(python_package.entrypoint, local_executable_specs.ModuleName):
+def _create_entrypoint_cmds(python_package: cluster_executable_specs.PythonPackage):
+    if isinstance(python_package.entrypoint, cluster_executable_specs.ModuleName):
         cmds = ["python3 -m {}".format(python_package.entrypoint.module_name)]
-    elif isinstance(python_package.entrypoint, local_executable_specs.CommandList):
+    elif isinstance(python_package.entrypoint, cluster_executable_specs.CommandList):
         cmds = python_package.entrypoint.commands
     else:
         raise ValueError("Unexpected entrypoint: {}".format(python_package.entrypoint))
@@ -107,14 +105,14 @@ def _create_entrypoint_cmds(python_package: local_executable_specs.PythonPackage
 
 
 def _package_python_package(
-    py_package: local_executable_specs.PythonPackage,
+    py_package: cluster_executable_specs.PythonPackage,
     packageable: xm.Packageable,
 ):
     executable_spec = py_package
     package_name = executable_spec.name
     version = datetime.datetime.now().strftime("%Y%m%d.%H%M%S")
 
-    executable_spec: local_executable_specs.PythonPackage = executable_spec
+    executable_spec: cluster_executable_specs.PythonPackage = executable_spec
 
     staging = tempfile.mkdtemp(dir=_staging_directory())
     archive_name = _create_archive(
@@ -138,7 +136,7 @@ def _package_python_package(
 
     entrypoint_cmd = "./entrypoint.sh"
 
-    return local_executables.Command(
+    return cluster_executables.Command(
         entrypoint_command=entrypoint_cmd,
         resource_uri=local_archive_path,
         name=package_name,

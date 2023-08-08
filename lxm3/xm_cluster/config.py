@@ -23,6 +23,25 @@ class Config(UserDict):
         config_dict = tomli.loads(content)
         return cls(config_dict)
 
+    def project(self):
+        project = os.environ.get("LXM_PROJECT", None)
+        if project is not None:
+            return project
+        return self.data.get("project", None)
+
+    def local_config(self):
+        return self.data["local"]
+
+    def cluster_config(self, location=None):
+        if location is None:
+            return self.data["clusters"][0]
+        else:
+            clusters = {cluster["name"]: cluster for cluster in self.data["clusters"]}
+            if location not in clusters:
+                raise ValueError("Unknown cluster")
+            cluster = clusters[location]
+            return cluster
+
 
 @functools.lru_cache()
 def default() -> Config:

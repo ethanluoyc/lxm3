@@ -36,8 +36,13 @@ class GridEngineTest(parameterized.TestCase):
         ]
     )
     def test_parse_job_id(self, text, expected):
-        match = gridengine._extract_job_id(text)
-        self.assertEqual(gridengine._split_job_ids(match), expected)
+        match = gridengine.parse_job_id(text)
+        self.assertEqual(gridengine.split_job_ids(match), expected)
+
+    def test_parse_job_2(self):
+        text = 'Your job-array 9834008.1-5:1 ("job-1677559794797") has been submitted'
+        match = gridengine.parse_job_id(text)
+        self.assertEqual(match.group(0), "9834008.1-5:1")
 
 
 if __name__ == "__main__":

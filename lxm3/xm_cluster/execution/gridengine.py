@@ -4,14 +4,13 @@ import shlex
 import shutil
 from typing import List, Union
 
-import termcolor
-from absl import logging
-
 from lxm3 import xm
 from lxm3._vendor.xmanager.xm import job_blocks
 from lxm3.clusters import gridengine
 from lxm3.xm_cluster import executables
 from lxm3.xm_cluster import executors
+from lxm3.xm_cluster.console import console
+from lxm3.xm_cluster.execution import artifacts
 
 _ARRAY_WRAPPER_TEMPLATE = """\
 %(shebang)s
@@ -109,22 +108,6 @@ def create_array_wrapper_script(
     return script
 
 
-def deploy_resource_archive(fs, storage_root, executable):
-    archive_dir = os.path.join(storage_root, "archives")
-    archive_name = os.path.basename(executable.resource_uri)
-    deploy_archive_path = os.path.join(archive_dir, archive_name)
-    if not fs.exists(deploy_archive_path):
-        fs.makedirs(archive_dir, exist_ok=True)
-        print(termcolor.colored(f"Deploying archive to {deploy_archive_path}", "cyan"))
-        fs.put_file(executable.resource_uri, deploy_archive_path)
-    return deploy_archive_path
-
-
-def _create_file(fs, path, content):
-    with fs.open(path, "wt") as f:
-        f.write(content)
-
-
 def _create_job_script(cmd, header, archives=None, setup=""):
     if archives is None:
         archives = []
@@ -167,54 +150,6 @@ cd $WORKDIR
     }
 
 
-def deploy_singularity_container(fs, storage_root, singularity_image):
-    from fsspec.implementations.local import LocalFileSystem
-
-    if isinstance(fs, LocalFileSystem):
-        # When running on local file system, we can just use the image path
-        logging.info("Running on local file system, using image path")
-        return os.path.abspath(singularity_image)
-
-    container_dir = os.path.join(storage_root, "containers")
-    if not fs.exists(container_dir):
-        fs.makedirs(container_dir, exist_ok=True)
-    image_name = os.path.basename(singularity_image)
-    deploy_container_path = os.path.join(container_dir, image_name)
-    if not fs.exists(deploy_container_path):
-        print(termcolor.colored(f"Uploading container {image_name}...", "cyan"))
-        fs.put(singularity_image, deploy_container_path)
-        print(
-            termcolor.colored(
-                f"  Singularity container available at {deploy_container_path}",
-                "cyan",
-            )
-        )
-    else:
-        if fs.modified(deploy_container_path) < datetime.datetime.fromtimestamp(
-            os.path.getmtime(singularity_image)
-        ):
-            print(
-                termcolor.colored(
-                    f"Local container is newer. Uploading container {image_name}...",
-                    "cyan",
-                )
-            )
-            fs.put(singularity_image, deploy_container_path)
-            print(
-                termcolor.colored(
-                    f"  Singularity container available at {deploy_container_path}",
-                    "cyan",
-                )
-            )
-        else:
-            print(
-                termcolor.colored(
-                    f"  Container {image_name} exists, skipping upload.", "blue"
-                )
-            )
-    return deploy_container_path
-
-
 def _generate_header_from_executor(
     job_name: str,
     executor: executors.GridEngine,
@@ -242,8 +177,9 @@ def _generate_header_from_executor(
         header.append(f"#$ -q {executor.queue}")
 
     reserved = executor.reserved
-    if reserved is None and executor.parallel_environments:
-        reserved = True
+    if reserved is None:
+        if executor.parallel_environments or "gpu" in executor.requirements.resources:
+            reserved = True
 
     if reserved:
         header.append("#$ -R")
@@ -287,22 +223,31 @@ def _generate_header_from_executor(
     return "\n".join(header)
 
 
-def _get_singulation_options(executor: Union[executors.GridEngine, executors.Local]):
-    singularity_opts = " ".join(executor.singularity_options)
+def _get_singulation_options(
+    executor: Union[executors.GridEngine, executors.Local]
+) -> str:
+    options = executor.singularity_options or executors.SingularityOptions()
+    result = []
+
+    if options.bind is not None:
+        for host, container in options.bind.items():
+            result.extend(["--bind", f"{host}:{container}"])
+
+    result.extend(list(options.extra_options))
 
     if isinstance(executor, executors.GridEngine):
         if (
             "gpu" in executor.parallel_environments
             or "gpu" in executor.requirements.resources
         ):
-            singularity_opts += " --nv"
+            result.append("--nv")
     elif isinstance(executor, executors.Local):
         if shutil.which("nvidia-smi"):
-            singularity_opts += " --nv"
+            result.append("--nv")
     else:
         raise ValueError(f"Unsupported executor type {type(executor)}")
 
-    return singularity_opts.strip()
+    return result
 
 
 def _validate_same_job_configuration(jobs):
@@ -315,10 +260,8 @@ def _validate_same_job_configuration(jobs):
             raise ValueError("All jobs must have the same executor.")
 
 
-def _create_job_header(executor, jobs, job_script_dir):
+def _create_job_header(executor, jobs, job_script_dir, job_name):
     if isinstance(executor, executors.GridEngine):
-        job_name = jobs[0].name
-
         job_header = _generate_header_from_executor(
             job_name, executor, len(jobs), job_script_dir
         )
@@ -329,23 +272,7 @@ def _create_job_header(executor, jobs, job_script_dir):
     return job_header
 
 
-def deploy_job_resources(fs, storage_root, jobs):
-    executable = jobs[0].executable
-    executor = jobs[0].executor
-
-    assert isinstance(executor, executors.GridEngine) or isinstance(
-        executor, executors.Local
-    )
-    assert isinstance(executable, executables.Command)
-    _validate_same_job_configuration(jobs)
-
-    deploy_archive_path = deploy_resource_archive(fs, storage_root, executable)
-
-    version = datetime.datetime.now().strftime("%Y%m%d.%H%M%S")
-    job_script_dir = os.path.join(storage_root, f"job_scripts/job-{version}")
-
-    fs.makedirs(job_script_dir, exist_ok=True)
-
+def _create_array_wrapper(executable, jobs):
     work_list = []
     for job in jobs:
         work_list.append(
@@ -357,40 +284,68 @@ def deploy_job_resources(fs, storage_root, jobs):
             }
         )
 
-    array_wrapper = create_array_wrapper_script(
+    return create_array_wrapper_script(
         cmd=executable.entrypoint_command, work_list=work_list, task_offset=1
     )
 
-    array_wrapper_path = os.path.join(job_script_dir, "array_wrapper.sh")
-    _create_file(fs, array_wrapper_path, array_wrapper)
-    setup_cmds = ["hostname"]
-    job_command = " ".join(["sh", os.fspath(array_wrapper_path), "$SGE_TASK_ID"])
+
+def _get_setup_cmds(executor: Union[executors.GridEngine, executors.Local]):
+    cmds = ["hostname"]
+    if executor.singularity_container is not None:
+        cmds.append("singularity --version")
+    return "\n".join(cmds)
+
+
+def deploy_job_resources(artifact: artifacts.Artifact, jobs, version=None):
+    version = version or datetime.datetime.now().strftime("%Y%m%d.%H%M%S")
+
+    executable = jobs[0].executable
+    executor = jobs[0].executor
+
+    assert isinstance(executor, executors.GridEngine) or isinstance(
+        executor, executors.Local
+    )
+    assert isinstance(executable, executables.Command)
+    _validate_same_job_configuration(jobs)
+
+    job_name = f"job-{version}"
+
+    job_script_dir = artifact.job_path(job_name)
+
+    deploy_array_wrapper_path = os.path.join(job_script_dir, "array_wrapper.sh")
+    # Always use the array wrapper for now.
+    job_command = " ".join(["sh", os.fspath(deploy_array_wrapper_path), "$SGE_TASK_ID"])
 
     singularity_image = executor.singularity_container
     if singularity_image is not None:
-        deploy_container_path = deploy_singularity_container(
-            fs, storage_root, singularity_image
+        deploy_container_path = artifact.singularity_image_path(
+            os.path.basename(singularity_image)
         )
-        singularity_opts = _get_singulation_options(executor)
+
+        singularity_opts = " ".join(_get_singulation_options(executor))
         job_command = (
             f"singularity exec {singularity_opts} {deploy_container_path} {job_command}"
         )
-        setup_cmds.append("singularity --version")
 
-    job_script_path = os.path.join(job_script_dir, "job.sh")
-    fs.makedirs(os.path.join(job_script_dir, "logs"), exist_ok=True)
-
-    job_header = _create_job_header(executor, jobs, job_script_dir)
-
+    array_wrapper = _create_array_wrapper(executable, jobs)
+    deploy_archive_path = artifact.archive_path(executable.resource_uri)
+    deploy_job_script_path = os.path.join(job_script_dir, "job.sh")
     job_script = _create_job_script(
         job_command,
-        job_header,
+        _create_job_header(executor, jobs, job_script_dir, job_name),
         archives=[deploy_archive_path],
-        setup="\n".join(setup_cmds),
+        setup=_get_setup_cmds(executor),
     )
-    _create_file(fs, job_script_path, job_script)
-    print(termcolor.colored(f"Created job script at {job_script_path}", "cyan"))
-    return job_script_path
+
+    # Put artifacts on the staging fs
+    artifact.deploy_resource_archive(executable.resource_uri)
+
+    if singularity_image is not None:
+        artifact.deploy_singularity_container(singularity_image)
+
+    artifact.deploy_job_scripts(job_name, job_script, array_wrapper)
+
+    return deploy_job_script_path
 
 
 class GridEngineHandle:
@@ -404,14 +359,22 @@ class GridEngineHandle:
         raise NotImplementedError()
 
 
-async def launch(hostname, user, fs, storage_root, jobs: List[xm.Job]):
+async def launch(config, jobs: List[xm.Job]):
     if len(jobs) < 1:
         return []
 
-    print(termcolor.colored(f"Launching {len(jobs)} jobs", "cyan"))
-    job_script_path = deploy_job_resources(fs, storage_root, jobs)
-
-    print(termcolor.colored(f"Launch with command:\n  qsub {job_script_path}", "cyan"))
+    cluster_config = config.cluster_config()
+    storage_root = cluster_config["storage"]["staging"]
+    hostname = cluster_config["server"]
+    user = cluster_config["user"]
+    artifact = artifacts.RemoteArtifact(hostname, user, storage_root, config.project())
     client = gridengine.Client(hostname, user)
-    job_ids = client.launch(job_script_path)
+    console.log(f"Launching {len(jobs)} jobs on {hostname}")
+    job_script_path = deploy_job_resources(artifact, jobs)
+
+    console.log(f"Launch with command:\n  qsub {job_script_path}")
+    group = client.launch(job_script_path)
+    console.log(f"Successfully launched job {group.group(0)}")
+    job_ids = gridengine.split_job_ids(group)
+
     return [GridEngineHandle(job_id) for job_id in job_ids]

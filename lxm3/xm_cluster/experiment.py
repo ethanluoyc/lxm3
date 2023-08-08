@@ -1,12 +1,9 @@
 import asyncio
 import contextlib
-import os
 import threading
 import time
 from concurrent import futures
 from typing import Any, Awaitable, Callable, List, Mapping, Optional
-
-import fsspec
 
 from lxm3._vendor.xmanager import xm
 from lxm3._vendor.xmanager.xm import async_packager
@@ -19,6 +16,7 @@ from lxm3.xm_cluster import executors
 from lxm3.xm_cluster import packaging
 from lxm3.xm_cluster.execution import gridengine as gridengine_execution
 from lxm3.xm_cluster.execution import local as local_execution
+from lxm3.xm_cluster.console import console
 
 
 def _gridengine_job_predicate(job: xm.Job):
@@ -35,7 +33,7 @@ class _LaunchResult:
         self.non_local_handles = non_local_handles
 
 
-async def _launch(jobs):
+async def _launch(jobs: List[xm.Job]):
     experiment: ClusterExperiment = core._current_experiment.get()
     gridengine_jobs = list(filter(_gridengine_job_predicate, jobs))
     local_jobs = list(filter(_local_job_predicate, jobs))
@@ -47,29 +45,14 @@ async def _launch(jobs):
 
     local_handles = []
     if local_jobs:
-        storage_root = os.path.abspath(experiment._local_staging_directory)
-        fs = fsspec.filesystem("file")
-        local_handles.extend(await local_execution.launch(fs, storage_root, local_jobs))
+        local_handles.extend(
+            await local_execution.launch(experiment._config, local_jobs)
+        )
 
     non_local_handles = []
     if gridengine_jobs:
-        storage_root = experiment._cluster_staging_directory
-        fs = fsspec.filesystem(
-            "sftp", host=experiment._cluster_hostname, username=experiment._cluster_user
-        )
-
-        # Normalize the storage root to an absolute path.
-        if not os.path.isabs(storage_root):
-            storage_root = fs.ftp.normalize(storage_root)
-
         non_local_handles.extend(
-            await gridengine_execution.launch(
-                experiment._cluster_hostname,
-                experiment._cluster_user,
-                fs,
-                storage_root,
-                jobs,
-            )
+            await gridengine_execution.launch(experiment._config, jobs)
         )
     return _LaunchResult(local_handles, non_local_handles)
 
@@ -149,27 +132,17 @@ class ClusterExperiment(xm.Experiment):
 
     _async_packager = async_packager.AsyncPackager(packaging.package)
 
-    def __init__(
-        self,
-        experiment_title: str,
-        local_staging_directory,
-        cluster_hostname: str,
-        cluster_user: str,
-        cluster_staging_directory: str,
-    ) -> None:
+    def __init__(self, experiment_title: str, config: Mapping[str, Any]) -> None:
         super().__init__()
         self.launched_jobs = []
         self.launched_jobs_args = []
-        self.delayed_jobs = []
         self._work_units = []
         self._experiment_id = int(time.time() * 10**3)
         self._in_batch_lock = threading.Lock()
         self._in_batch = False
+        self.delayed_jobs = []
         self._experiment_title = experiment_title
-        self._local_staging_directory = local_staging_directory
-        self._cluster_hostname = cluster_hostname
-        self._cluster_user = cluster_user
-        self._cluster_staging_directory = cluster_staging_directory
+        self._config = config
 
     def is_in_batch(self):
         with self._in_batch_lock:
@@ -185,8 +158,7 @@ class ClusterExperiment(xm.Experiment):
             pass
         if is_coro_context:
             raise RuntimeError(
-                "When using Experiment.batch from a coroutine please use "
-                "`async with experiment.async_batch` syntax"
+                "Launching batch experiment from async context is not yet supported."
             )
         try:
             assert not self._in_batch
@@ -212,27 +184,6 @@ class ClusterExperiment(xm.Experiment):
                     callback(results)
 
             self._create_task(launch_array_jobs())
-            self.delayed_jobs = []
-            self._in_batch = False
-
-    @contextlib.asynccontextmanager
-    async def async_batch(self):
-        try:
-            assert not self._in_batch
-            if len(self._work_units) > 0:
-                while not self._work_units[-1]._launch_event.is_set():
-                    await asyncio.sleep(0.1)
-            self._in_batch = True
-            yield
-        finally:
-            if len(self._work_units) > 0:
-                while not self._work_units[-1]._launch_event.is_set():
-                    await asyncio.sleep(0.1)
-            delayed_jobs = [j[0] for j in self.delayed_jobs]
-            delayed_cb = [j[2] for j in self.delayed_jobs]
-            handles = _launch(delayed_jobs)
-            for callback, handle in zip(delayed_cb, handles):
-                callback(handle)
             self.delayed_jobs = []
             self._in_batch = False
 
@@ -279,7 +230,7 @@ class ClusterExperiment(xm.Experiment):
     def _wait_for_local_jobs(self, is_exit_abrupt: bool):
         if self._work_units:
             if any([wu._local_handles for wu in self._work_units]):
-                print(
+                console.print(
                     "Waiting for local jobs to complete. "
                     "Press Ctrl+C to terminate them and exit"
                 )
@@ -311,33 +262,7 @@ class ClusterExperiment(xm.Experiment):
         return self._experiment_id
 
 
-def create_experiment(
-    experiment_title: str = "",
-    *,
-    project=None,
-    cluster=None,
-    config=None,
-):
+def create_experiment(experiment_title: str = "", config=None):
     config = config or config_lib.default()
-    if cluster is not None:
-        for cluster_config in config["clusters"]:
-            if cluster_config["name"] == cluster:
-                break
-        raise ValueError(f"Cluster {cluster} not found in config")
-    else:
-        cluster_config = config["clusters"][0]
 
-    if project is None:
-        project = config["project"]
-
-    return ClusterExperiment(
-        experiment_title,
-        local_staging_directory=os.path.join(
-            config["local"]["storage"]["staging"], project
-        ),
-        cluster_hostname=cluster_config["server"],
-        cluster_user=cluster_config["user"],
-        cluster_staging_directory=os.path.join(
-            cluster_config["storage"]["staging"], project
-        ),
-    )
+    return ClusterExperiment(experiment_title, config=config)

@@ -4,9 +4,12 @@ import shlex
 import subprocess
 
 import paramiko
+import logging
+
+logging.getLogger("paramiko.transport").setLevel(logging.WARNING)
 
 
-def _extract_job_id(output):
+def parse_job_id(output):
     match = re.search(
         r"(?P<job_id>\d+)(.?(?P<task_start>\d+)-(?P<task_end>\d+):(?P<task_step>\d+))?",
         output,
@@ -16,7 +19,7 @@ def _extract_job_id(output):
     return match
 
 
-def _split_job_ids(match):
+def split_job_ids(match):
     job_id = match.group("job_id")
     task_start = match.group("task_start")
     task_end = match.group("task_end")
@@ -52,10 +55,8 @@ class Client:
 
     def launch(self, command):
         output = self._submit_command(command)
-        match = _extract_job_id(output)
-        print(f"Successfully launched job {match.group(0)}")
-        job_ids = _split_job_ids(match)
-        return job_ids
+        match = parse_job_id(output)
+        return match
 
     def _run_command(self, command: str):
         if self._ssh is None:

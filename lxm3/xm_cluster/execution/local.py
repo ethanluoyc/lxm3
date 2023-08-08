@@ -4,12 +4,14 @@ import concurrent.futures
 import os
 import subprocess
 from typing import List
+import fsspec
 
-import termcolor
 from absl import logging
 
 from lxm3 import xm
 from lxm3.xm_cluster.execution import gridengine
+from lxm3.xm_cluster.console import console
+from lxm3.xm_cluster.execution import artifacts
 
 _LOCAL_EXECUTOR = None
 
@@ -38,13 +40,20 @@ class LocalExecutionHandle:
         await asyncio.wrap_future(self.future)
 
 
-async def launch(fs, storage_root, jobs: List[xm.Job]):
+async def launch(config, jobs: List[xm.Job]):
     if len(jobs) < 1:
         return []
 
-    job_script_path = gridengine.deploy_job_resources(fs, storage_root, jobs)
+    local_config = config.local_config()
+    storage_root = os.path.abspath(
+        os.path.expanduser(local_config["storage"]["staging"])
+    )
+    fs = fsspec.filesystem("file")
 
-    print(termcolor.colored(f"Launching {len(jobs)} jobs locally...", "cyan"))
+    artifact = artifacts.LocalArtifact(fs, storage_root, project=config.project())
+    job_script_path = gridengine.deploy_job_resources(artifact, jobs)
+
+    console.print(f"Launching {len(jobs)} jobs locally...")
     handles = []
     for i in range(len(jobs)):
 
