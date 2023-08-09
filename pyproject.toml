@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "lxm3"
 description = 'LXM3: XManager launch backend for HPC clusters'
 readme = "README.md"
-requires-python = ">=3.9,<=3.10"
+requires-python = ">=3.9,<3.11"
 license = "MIT"
 keywords = []
 authors = [{ name = "Yicheng Luo", email = "ethanluoyc@gmail.com" }]
