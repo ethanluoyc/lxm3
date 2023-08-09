@@ -56,13 +56,14 @@ class ConfigTest(parameterized.TestCase):
         gridengine.deploy_job_resources(artifact, [job], version=version)
         expected_paths = [
             f"containers/{container_name}",
-            f"job_scripts/job-{version}/job.sh",
-            f"job_scripts/job-{version}/array_wrapper.sh",
+            f"jobs/job-{version}/job.sh",
+            f"jobs/job-{version}/array_wrapper.sh",
             f"archives/{archive_name}",
         ]
         for path in expected_paths:
-            full_path = os.path.exists(os.path.join(deploy_dir, path))
-            self.assertTrue(full_path)
+            with self.subTest(path):
+                full_path = os.path.exists(os.path.join(deploy_dir, path))
+                self.assertTrue(full_path)
 
 
 if __name__ == "__main__":
