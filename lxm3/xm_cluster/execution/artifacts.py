@@ -84,6 +84,11 @@ class Artifact(abc.ABC):
 class LocalArtifact(Artifact):
     def __init__(self, filesystem, staging_directory: str, project=None):
         super().__init__(staging_directory, project)
+        if not os.path.exists(staging_directory):
+            os.makedirs(staging_directory)
+            # Create a .gitignore file to prevent git from tracking the directory
+            with open(os.path.join(staging_directory, ".gitignore"), "wt") as f:
+                f.write("*\n")
         self._fs = filesystem
 
     def deploy_job_scripts(self, job_name, job_script, array_wrapper):
