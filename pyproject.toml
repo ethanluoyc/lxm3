@@ -38,6 +38,7 @@ lxm3 = "lxm3.cli.cli:entrypoint"
 dependencies = [
   "coverage[toml]>=6.5",
   "pytest",
+  "pre-commit"
 ]
 [tool.hatch.envs.default.scripts]
 test = "pytest {args:lxm3}"
