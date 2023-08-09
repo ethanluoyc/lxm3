@@ -1,13 +1,12 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [project]
 name = "lxm3"
-version = "0.1.0"
-description = ''
+description = 'LXM3: XManager launch backend for HPC clusters'
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.9,<=3.10"
 license = "MIT"
 keywords = []
 authors = [{ name = "Yicheng Luo", email = "ethanluoyc@gmail.com" }]
@@ -18,6 +17,8 @@ classifiers = [
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: Implementation :: CPython",
 ]
+dynamic = ["version"]
+
 dependencies = [
   "absl-py",
   "attrs",
@@ -40,6 +41,10 @@ dependencies = [
   "pytest",
   "pre-commit"
 ]
+
+[tool.hatch.version]
+source = "vcs"
+
 [tool.hatch.envs.default.scripts]
 test = "pytest {args:lxm3}"
 test-cov = "coverage run -m pytest {args:lxm3}"

@@ -8,9 +8,14 @@ from absl import app
 
 
 def main(argv):
+    cmd = argv[1]
+    if cmd == "version":
+        from lxm3 import __version__
+
+        print(__version__)
+        sys.exit(0)
     if len(argv) < 3:
         raise app.UsageError("There must be at least 2 command-line arguments")
-    cmd = argv[1]
     if cmd == "launch":
         launch_script = argv[2]
         if not os.path.exists(launch_script):
