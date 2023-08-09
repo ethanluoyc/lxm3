@@ -55,9 +55,7 @@ def default() -> Config:
     cwd_path = os.path.join(os.getcwd(), "lxm.toml")
     if os.path.exists(cwd_path):
         return Config.from_file(cwd_path)
-    if os.path.exists(cwd_path):
-        return Config.from_file(cwd_path)
-    user_config_path = os.path.join(appdirs.user_config_dir("lxm"), "lxm.toml")
+    user_config_path = os.path.join(appdirs.user_config_dir("lxm3"), "config.toml")
     if os.path.exists(user_config_path):
         return Config.from_file(user_config_path)
     else:
