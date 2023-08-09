@@ -6,7 +6,6 @@ import os
 import shutil
 import subprocess
 import tempfile
-import zipfile
 from typing import Any, List
 
 from absl import logging
@@ -16,6 +15,8 @@ from lxm3._vendor.xmanager.xm import pattern_matching
 from lxm3.xm_cluster import executable_specs as cluster_executable_specs
 from lxm3.xm_cluster import executables as cluster_executables
 from lxm3.xm_cluster.console import console
+
+_ENTRYPOINT = "./entrypoint.sh"
 
 
 @functools.lru_cache()
@@ -31,8 +32,14 @@ def _staging_directory():
     return staging_dir
 
 
-def _create_archive(staging_directory, package_name, version, package_dir, resources):
+def _create_archive(
+    staging_directory: str, py_package: cluster_executable_specs.PythonPackage
+):
+    package_name = py_package.name
+    version = datetime.datetime.now().strftime("%Y%m%d.%H%M%S")
     archive_name = f"{package_name}-{version}"
+    package_dir = py_package.path
+    resources = py_package.resources
 
     with tempfile.TemporaryDirectory() as tmpdir:
         with console.status(
@@ -80,13 +87,23 @@ def _create_archive(staging_directory, package_name, version, package_dir, resou
             for f in glob.glob(os.path.join(tmpdir, "*.dist-info")):
                 shutil.rmtree(f)
 
+            entrypoint = f"""\
+#!/bin/bash
+{_create_entrypoint_cmds(py_package)}
+"""
+            with open(os.path.join(tmpdir, _ENTRYPOINT), "w") as f:
+                f.write(entrypoint)
+            os.chmod(f.name, 0o755)
             archive_name = shutil.make_archive(
                 os.path.join(staging_directory, archive_name),
                 "zip",
                 tmpdir,
                 verbose=True,
             )
-        console.log(f"Created archive: [repr.path]{os.path.basename(archive_name)}[repr.path]")
+
+        console.log(
+            f"Created archive: [repr.path]{os.path.basename(archive_name)}[repr.path]"
+        )
         return os.path.basename(archive_name)
 
 
@@ -108,38 +125,15 @@ def _package_python_package(
     py_package: cluster_executable_specs.PythonPackage,
     packageable: xm.Packageable,
 ):
-    executable_spec = py_package
-    package_name = executable_spec.name
-    version = datetime.datetime.now().strftime("%Y%m%d.%H%M%S")
-
-    executable_spec: cluster_executable_specs.PythonPackage = executable_spec
-
     staging = tempfile.mkdtemp(dir=_staging_directory())
-    archive_name = _create_archive(
-        staging,
-        package_name,
-        version,
-        executable_spec.path,
-        executable_spec.resources,
-    )
+    archive_name = _create_archive(staging, py_package)
     local_archive_path = os.path.join(staging, archive_name)
-    with zipfile.ZipFile(local_archive_path, mode="a") as zf:
-        if zipfile.Path(zf, "entrypoint.sh").exists():
-            raise ValueError("Unexpected entrypoint.sh in the archive")
-        info = zipfile.ZipInfo("entrypoint.sh")
-        info.external_attr = 0o755 << 16
-        entrypoint = f"""\
-#!/bin/bash
-{_create_entrypoint_cmds(executable_spec)}
-"""
-        zf.writestr(info, entrypoint)
-
-    entrypoint_cmd = "./entrypoint.sh"
+    entrypoint_cmd = _ENTRYPOINT
 
     return cluster_executables.Command(
         entrypoint_command=entrypoint_cmd,
         resource_uri=local_archive_path,
-        name=package_name,
+        name=py_package.name,
         args=packageable.args,
         env_vars=packageable.env_vars,
     )
