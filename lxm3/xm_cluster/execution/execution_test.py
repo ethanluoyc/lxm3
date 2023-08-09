@@ -23,8 +23,16 @@ class ConfigTest(parameterized.TestCase):
             self.assertEqual(gridengine._get_singulation_options(executor), expected)
 
     @parameterized.named_parameters(
-        ("sge_gpu", executors.GridEngine(requirements=JobRequirements(gpu=1)), ["--nv"]),
-        ("sge_gpu_pe", executors.GridEngine(parallel_environments={"gpu": 1}), ["--nv"]),
+        (
+            "sge_gpu",
+            executors.GridEngine(requirements=JobRequirements(gpu=1)),
+            ["--nv"],
+        ),
+        (
+            "sge_gpu_pe",
+            executors.GridEngine(parallel_environments={"gpu": 1}),
+            ["--nv"],
+        ),
         ("sge_default", executors.GridEngine(), []),
     )
     def test_singularity_options_gridengine(self, executor, expected):
