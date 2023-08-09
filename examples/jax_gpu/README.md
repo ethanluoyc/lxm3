@@ -1,7 +1,11 @@
 # Basic example
-This example shows how to launch python programs in JAX with lxm3.
+This example shows how to launch python programs in JAX (with GPU acceleration) using lxm3.
 
 ## 1. Prerequisites
+This section walks through the steps for setting up Singularity, which is the preferred way of running jobs created by lxm3. 
+
+This section is not specific to lxm3: you can use the same steps to set up Singularity for other projects.
+
 ### 1.1 Install Singularity
 The example uses a Singularity container for installing all dependencies.
 You can install SingularityCE by following the [official documentaion](https://docs.sylabs.io/guides/latest/user-guide/). There is a simple installation script for Ubuntu in the [docs](../../docs/install-singularity.sh) folder.
@@ -42,7 +46,7 @@ singularity exec lolcow_latest.sif cowsay moo
 #                 ||     ||
 ```
 
-### 1.2. Build a singularity container
+### 1.2 Build a singularity container
 
 We will demonstrate how to build a singularity container from a Docker container in this example. This is convenient
 if you already know how to write a Dockerfile. Alternatively, you can also build from a Singularity definition file.
@@ -66,18 +70,17 @@ Great! You have now completed all pre-requisites for working with Singularity im
 
 ## 2. Running the example with LXM3
 
-### 2.1. Install lxm3
+### 2.1 Install lxm3
 ```bash
-# TODO(yl): failing for python3.9 
-python3.10 -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 # Install lxm3
-pip install ../../
+python3 -m pip install ../../
 # Try out the lxm3 command
 lxm3 --help
 ```
 
-### 2.2. Set up a configuration file for lxm3
+### 2.2 Set up a configuration file for lxm3
 Put the following content in a file called `lxm.toml`:
 ```toml
 project = "" # Optional project name
@@ -109,14 +112,13 @@ lxm3 launch launcher.py -- --lxm_config lxm.toml
 ```
 
 #### Running on the cluster
-Now let's try running the example on the cluster.
-
-_Note: this example was tested on the CS HPC cluster_.
-Unfortunately, different clusters have different ways of
+_Note: this example was tested on the [HPC cluster](https://hpc.cs.ucl.ac.uk/) from the CS department.
+Unfortunately, different SGE clusters have different ways of
 specifying job requirements so you may have to modify 
 the `JobRequirements` in `launcher.py` to make it work on
-a different cluster. 
+a different cluster._
 
+Now let's try running the example on the cluster.
 ```bash
 lxm3 launch launcher.py -- --lxm_config lxm.toml --launch_on_cluster
 ```
