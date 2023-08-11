@@ -89,6 +89,7 @@ def _create_archive(
 
             entrypoint = f"""\
 #!/bin/bash
+export PYTHONPATH=$(dirname $0):$PYTHONPATH
 {_create_entrypoint_cmds(py_package)}
 """
             with open(os.path.join(tmpdir, _ENTRYPOINT), "w") as f:
