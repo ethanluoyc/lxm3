@@ -1,0 +1,22 @@
+Bootstrap: docker
+From: nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu20.04
+
+%environment
+    export VIRTUAL_ENV=/opt/venv
+    export PATH=$VIRTUAL_ENV/bin:$PATH
+
+%post
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update
+    apt-get install -q -y --no-install-recommends \
+        cuda-command-line-tools-11-8 cuda-nvcc-11-8 \
+        python3.9 python3.9-venv python3.9-distutils
+    apt-get clean
+    rm -rf /var/lib/apt/lists/*
+    ln -sf /usr/bin/python3.9 /usr/bin/python3
+    ln -sf /usr/bin/python3.9 /usr/bin/python
+    export VIRTUAL_ENV=/opt/venv
+    python3.9 -m venv $VIRTUAL_ENV
+    export PATH=$VIRTUAL_ENV/bin:$PATH
+
+    python3 -m pip install --no-cache-dir -U absl-py "jax[cuda11_local]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
