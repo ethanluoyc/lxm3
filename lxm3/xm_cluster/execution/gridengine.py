@@ -289,9 +289,9 @@ def _create_array_wrapper(executable, jobs):
     )
 
 
-def _get_setup_cmds(executor: Union[executors.GridEngine, executors.Local]):
+def _get_setup_cmds(executable: executables.Command):
     cmds = ["hostname"]
-    if executor.singularity_container is not None:
+    if executable.singularity_image is not None:
         cmds.append("singularity --version")
     return "\n".join(cmds)
 
@@ -316,7 +316,7 @@ def deploy_job_resources(artifact: artifacts.Artifact, jobs, version=None):
     # Always use the array wrapper for now.
     job_command = " ".join(["sh", os.fspath(deploy_array_wrapper_path), "$SGE_TASK_ID"])
 
-    singularity_image = executor.singularity_container
+    singularity_image = executable.singularity_image
     if singularity_image is not None:
         deploy_container_path = artifact.singularity_image_path(
             os.path.basename(singularity_image)
@@ -334,7 +334,7 @@ def deploy_job_resources(artifact: artifacts.Artifact, jobs, version=None):
         job_command,
         _create_job_header(executor, jobs, job_script_dir, job_name),
         archives=[deploy_archive_path],
-        setup=_get_setup_cmds(executor),
+        setup=_get_setup_cmds(executable),
     )
 
     # Put artifacts on the staging fs

@@ -58,3 +58,15 @@ class PythonPackage(job_blocks.ExecutableSpec):
     @property
     def name(self) -> str:
         return name_from_path(self.path)
+
+
+@attr.s(auto_attribs=True)
+class SingularityContainer(job_blocks.ExecutableSpec):
+    entrypoint: PythonPackage
+    image_path: str = attr.ib(
+        converter=utils.resolve_path_relative_to_launcher, default="."
+    )
+
+    @property
+    def name(self) -> str:
+        return self.entrypoint.name

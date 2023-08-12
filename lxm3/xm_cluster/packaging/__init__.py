@@ -140,6 +140,27 @@ def _package_python_package(
     )
 
 
+def _package_singularity_container(
+    container: cluster_executable_specs.SingularityContainer,
+    packageable: xm.Packageable,
+):
+    py_package = container.entrypoint
+    assert isinstance(py_package, cluster_executable_specs.PythonPackage)
+    staging = tempfile.mkdtemp(dir=_staging_directory())
+    archive_name = _create_archive(staging, py_package)
+    local_archive_path = os.path.join(staging, archive_name)
+    entrypoint_cmd = _ENTRYPOINT
+
+    return cluster_executables.Command(
+        entrypoint_command=entrypoint_cmd,
+        resource_uri=local_archive_path,
+        name=py_package.name,
+        args=packageable.args,
+        env_vars=packageable.env_vars,
+        singularity_image=container.image_path,
+    )
+
+
 def _throw_on_unknown_executable(
     executable: Any,
     packageable: xm.Packageable,
@@ -152,6 +173,7 @@ def _throw_on_unknown_executable(
 
 _PACKAGING_ROUTER = pattern_matching.match(
     _package_python_package,
+    _package_singularity_container,
     _throw_on_unknown_executable,
 )
 

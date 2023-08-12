@@ -1,23 +1,14 @@
 #!/usr/bin/env python3
 from absl import app
-from absl import flags
 
 from lxm3 import xm
 from lxm3 import xm_cluster
 
-_SINGULARITY_CONTAINER = flags.DEFINE_string(
-    "container", None, "Path to singularity container"
-)
-
 
 def main(_):
     with xm_cluster.create_experiment(experiment_title="sweep") as experiment:
-        singularity_container = _SINGULARITY_CONTAINER.value
         requirements = xm_cluster.JobRequirements()
-        executor = xm_cluster.Local(
-            requirements=requirements,
-            singularity_container=singularity_container,
-        )
+        executor = xm_cluster.Local(requirements=requirements)
 
         packageable = xm.Packageable(
             executable_spec=xm_cluster.PythonPackage(

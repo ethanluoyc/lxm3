@@ -38,28 +38,32 @@ def main(_):
             executor = xm_cluster.GridEngine(
                 requirements=requirements,
                 walltime=10 * xm.Min,
-                singularity_container=singularity_container,
             )
         else:
             executor = xm_cluster.Local(
                 requirements=requirements,
-                singularity_container=singularity_container,
             )
 
-        packageable = xm.Packageable(
-            executable_spec=xm_cluster.PythonPackage(
-                # This is a relative path to the launcher that contains
-                # your python package (i.e. the directory that contains pyproject.toml)
-                path=".",
-                # Entrypoint is the python module that you would like to
-                # In the implementation, this is translated to
-                #   python3 -m py_package.main
-                entrypoint=xm_cluster.ModuleName("py_package.main"),
-            ),
-            executor_spec=executor.Spec(),
+        spec = xm_cluster.PythonPackage(
+            # This is a relative path to the launcher that contains
+            # your python package (i.e. the directory that contains pyproject.toml)
+            path=".",
+            # Entrypoint is the python module that you would like to
+            # In the implementation, this is translated to
+            #   python3 -m py_package.main
+            entrypoint=xm_cluster.ModuleName("py_package.main"),
         )
 
-        [executable] = experiment.package([packageable])
+        # Wrap the python_package to be executing in a singularity container.
+        if singularity_container is not None:
+            spec = xm_cluster.SingularityContainer(
+                spec,
+                image_path=singularity_container,
+            )
+
+        [executable] = experiment.package(
+            [xm.Packageable(spec, executor_spec=executor.Spec())]
+        )
 
         experiment.add(
             xm.Job(

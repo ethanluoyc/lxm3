@@ -1,5 +1,5 @@
 import attr
-from typing import Dict
+from typing import Dict, Optional
 
 from lxm3 import xm
 
@@ -10,3 +10,4 @@ class Command(xm.Executable):
     resource_uri: str
     args: xm.SequentialArgs = attr.Factory(xm.SequentialArgs)
     env_vars: Dict[str, str] = attr.Factory(dict)
+    singularity_image: Optional[str] = None

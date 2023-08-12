@@ -48,13 +48,12 @@ class ConfigTest(parameterized.TestCase):
 
         deploy_dir = self.create_tempdir(name="deploy")
 
-        executor = executors.GridEngine(
-            singularity_container=container.full_path,
-        )
+        executor = executors.GridEngine()
         executable = cluster_executables.Command(
             name="test",
             entrypoint_command="echo hello",
             resource_uri=archive.full_path,
+            singularity_image=container.full_path,
         )
         version = "1"
 

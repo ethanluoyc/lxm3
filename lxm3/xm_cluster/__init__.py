@@ -2,6 +2,7 @@ from lxm3.xm_cluster.executable_specs import CommandList
 from lxm3.xm_cluster.executable_specs import Fileset
 from lxm3.xm_cluster.executable_specs import ModuleName
 from lxm3.xm_cluster.executable_specs import PythonPackage
+from lxm3.xm_cluster.executable_specs import SingularityContainer
 from lxm3.xm_cluster.executables import Command
 from lxm3.xm_cluster.executors import GridEngine
 from lxm3.xm_cluster.executors import Local
