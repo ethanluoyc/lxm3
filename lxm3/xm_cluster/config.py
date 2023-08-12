@@ -34,6 +34,9 @@ class Config(UserDict):
 
     def cluster_config(self, location=None):
         if location is None:
+            if os.environ.get("LXM_CLUSTER", None) is not None:
+                location = os.environ["LXM_CLUSTER"]
+        if location is None:
             return self.data["clusters"][0]
         else:
             clusters = {cluster["name"]: cluster for cluster in self.data["clusters"]}
