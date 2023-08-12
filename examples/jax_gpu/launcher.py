@@ -23,26 +23,17 @@ def main(_):
         # as you may spend quite some time figuring out dependency problems than
         # writing a simple Dockfiler/Singularity file.
         singularity_container = _SINGULARITY_CONTAINER.value
-        if _GPU.value:
-            # Currently, the job requirements accept arbitrary key-value pairs
-            # For SGE, this is translated to -l key=value directives.
-            requirements = xm_cluster.JobRequirements(gpu=1, tmem=8 * xm.GB)
-        else:
-            # CS cluster suggests setting both tmem and h_vmem
-            # for CPU jobs. For GPU jobs, only tmem is used and setting
-            # h_vmem may result in an error.
-            # The way to configure myriad is different.
-            requirements = xm_cluster.JobRequirements(tmem=8 * xm.GB, h_vmem=8 * xm.GB)
         if _LAUNCH_ON_CLUSTER.value:
             # There are more configuration for GridEngine, checkout the source code.
+            resources = dict(gpu=1, tmem=8 * xm.GB)
+            if not _GPU.value:
+                resources["h_vmem"] = resources["tmem"]
             executor = xm_cluster.GridEngine(
-                requirements=requirements,
+                resources=resources,
                 walltime=10 * xm.Min,
             )
         else:
-            executor = xm_cluster.Local(
-                requirements=requirements,
-            )
+            executor = xm_cluster.Local()
 
         spec = xm_cluster.PythonPackage(
             # This is a relative path to the launcher that contains

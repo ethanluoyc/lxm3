@@ -1,4 +1,4 @@
-from typing import Dict, Optional, Sequence, Union
+from typing import Dict, Optional, Sequence, Union, Any
 
 import attr
 
@@ -25,6 +25,7 @@ class LocalSpec(xm.ExecutorSpec):
 class Local(xm.Executor):
     """Local executor."""
 
+    # Placeholder, no effect right now
     requirements: JobRequirements = attr.Factory(JobRequirements)
 
     singularity_options: Optional[SingularityOptions] = None
@@ -41,7 +42,11 @@ class GridEngineSpec(xm.ExecutorSpec):
 class GridEngine(xm.Executor):
     """SGE executor."""
 
+    # TODO(yl): Consider auto-configuring cluster-specific requirements
+    # from general requirements.
     requirements: JobRequirements = attr.Factory(JobRequirements)
+    # Resources passed to qsub as -l
+    resources: Dict[str, Any] = attr.Factory(dict)
     parallel_environments: Dict[str, int] = attr.Factory(dict)
     walltime: Optional[Union[int, str]] = None
 

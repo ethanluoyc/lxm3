@@ -163,6 +163,9 @@ def _generate_header_from_executor(
     for resource, value in executor.requirements.resources.items():
         header.append(f"#$ -l {resource}={value}")
 
+    for resource, value in executor.resources.items():
+        header.append(f"#$ -l {resource}={value}")
+
     for pe_name, value in executor.parallel_environments.items():
         header.append(f"#$ -pe {pe_name} {value}")
 
@@ -239,6 +242,7 @@ def _get_singulation_options(
         if (
             "gpu" in executor.parallel_environments
             or "gpu" in executor.requirements.resources
+            or "gpu" in executor.resources
         ):
             result.append("--nv")
     elif isinstance(executor, executors.Local):
