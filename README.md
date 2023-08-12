@@ -8,11 +8,18 @@ lxm3 provides an implementation for DeepMind's [XManager](https://github.com/dee
 
 Currently, lxm3 provides a local execution backend and support for the [SGE](https://en.wikipedia.org/wiki/Oracle_Grid_Engine) scheduler. The code should be extensible enough to support [Slurm](https://slurm.schedmd.com/). _If you would like to use lxm3 with Slurm or other schedulers, please get in touch (See https://github.com/ethanluoyc/lxm3/issues/2)._
 
+__NOTE__: lxm3 is still in early development. The API is not stable and may change in the future. We periodically update tag versions which are considered in good shape.
+If you use lxm3 in your project, please pin to a specific commit/tag to avoid
+breaking changes.
+
 ## Installation
-You should install Singularity and rsync before using lxm3.
+For running on a cluster, you should install Singularity and rsync before using lxm3.
+It may be possible to run on the cluster without Singularity, but that path
+was not tested thoroughly.
 
 You can install lxm3 from this repository by running.
-```
+```bash
+# Consider pinning to a specific commit/tag.
 pip install git+https://github.com/ethanluoyc/lxm3
 ```
 
@@ -28,6 +35,7 @@ lxm3 provides the following executable specification and executors.
 | Name      | Description |
 | ----------- | ----------- |
 | `lxm3.xm_cluster.PythonPackage`      | A python application packageable with pip |
+| `lxm3.xm_cluster.SingularityContainer` | An executable running with Singularity |
 
 ### Executors
 | Name      | Description |
