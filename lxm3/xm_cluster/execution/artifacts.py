@@ -183,9 +183,9 @@ class RemoteArtifact(Artifact):
             )
             console.log(f"Deployed Singularity container to {deploy_container_path}")
         else:
-            if fs.modified(deploy_container_path) < datetime.datetime.fromtimestamp(
-                os.path.getmtime(singularity_image)
-            ):
+            if fs.info(deploy_container_path)[
+                "mtime"
+            ] < datetime.datetime.fromtimestamp(os.path.getmtime(singularity_image)):
                 console.log(
                     f"Local container is newer. Uploading container {image_name}..."
                 )
