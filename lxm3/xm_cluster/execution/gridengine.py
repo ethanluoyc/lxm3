@@ -189,7 +189,7 @@ def _generate_header_from_executor(
             reserved = True
 
     if reserved:
-        header.append("#$ -R")
+        header.append("#$ -R y")
 
     log_directory = executor.log_directory or os.path.join(job_script_dir, "logs")
     if num_array_tasks is not None:
