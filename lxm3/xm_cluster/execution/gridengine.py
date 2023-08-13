@@ -181,7 +181,11 @@ def _generate_header_from_executor(
 
     reserved = executor.reserved
     if reserved is None:
-        if executor.parallel_environments or "gpu" in executor.requirements.resources:
+        if (
+            executor.parallel_environments
+            or "gpu" in executor.requirements.resources
+            or "gpu" in executor.resources
+        ):
             reserved = True
 
     if reserved:
