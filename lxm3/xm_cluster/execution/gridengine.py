@@ -2,7 +2,7 @@ import datetime
 import os
 import shlex
 import shutil
-from typing import List, Union
+from typing import List, Union, Optional
 
 from lxm3 import xm
 from lxm3._vendor.xmanager.xm import job_blocks
@@ -153,7 +153,7 @@ cd $WORKDIR
 def _generate_header_from_executor(
     job_name: str,
     executor: executors.GridEngine,
-    num_array_tasks: int,
+    num_array_tasks: Optional[int],
     job_script_dir: str,
 ):
     header = []
@@ -188,16 +188,22 @@ def _generate_header_from_executor(
         header.append("#$ -R")
 
     log_directory = executor.log_directory or os.path.join(job_script_dir, "logs")
-    stdout = os.path.join(log_directory, "$JOB_NAME.o$JOB_ID.$TASK_ID")
+    if num_array_tasks is not None:
+        stdout = os.path.join(log_directory, "$JOB_NAME.o$JOB_ID.$TASK_ID")
+        stderr = os.path.join(log_directory, "$JOB_NAME.e$JOB_ID.$TASK_ID")
+    else:
+        stdout = os.path.join(log_directory, "$JOB_NAME.o$JOB_ID")
+        stderr = os.path.join(log_directory, "$JOB_NAME.e$JOB_ID")
+
     header.append(f"#$ -o {stdout}")
-    stderr = os.path.join(log_directory, "$JOB_NAME.e$JOB_ID.$TASK_ID")
     header.append(f"#$ -e {stderr}")
     if executor.merge_output:
         header.append("#$ -j y")
 
-    header.append(f"#$ -t 1-{num_array_tasks}")
-    if executor.max_parallel_tasks:
-        header.append(f"#$ -tc {executor.max_parallel_tasks}")
+    if num_array_tasks is not None:
+        header.append(f"#$ -t 1-{num_array_tasks}")
+        if executor.max_parallel_tasks:
+            header.append(f"#$ -tc {executor.max_parallel_tasks}")
 
     # Use current working directory
     header.append("#$ -cwd")
@@ -266,8 +272,9 @@ def _validate_same_job_configuration(jobs):
 
 def _create_job_header(executor, jobs, job_script_dir, job_name):
     if isinstance(executor, executors.GridEngine):
+        num_array_tasks = len(jobs) if len(jobs) > 1 else None
         job_header = _generate_header_from_executor(
-            job_name, executor, len(jobs), job_script_dir
+            job_name, executor, num_array_tasks, job_script_dir
         )
 
     elif isinstance(executor, executors.Local):
@@ -299,6 +306,13 @@ def _get_setup_cmds(executable: executables.Command, executor):
     if isinstance(executor, executors.GridEngine):
         for module in executor.modules:
             cmds.append(f"module load {module}")
+        if (
+            "gpu" in executor.parallel_environments
+            or "gpu" in executor.requirements.resources
+            or "gpu" in executor.resources
+        ):
+            cmds.append("nvidia-smi")
+            cmds.append("echo CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES")
 
     if executable.singularity_image is not None:
         cmds.append("singularity --version")
@@ -322,8 +336,13 @@ def deploy_job_resources(artifact: artifacts.Artifact, jobs, version=None):
     job_script_dir = artifact.job_path(job_name)
 
     deploy_array_wrapper_path = os.path.join(job_script_dir, "array_wrapper.sh")
-    # Always use the array wrapper for now.
-    job_command = " ".join(["sh", os.fspath(deploy_array_wrapper_path), "$SGE_TASK_ID"])
+    # Always use the array wrapper for but hardcode task id if not launching one job.
+    if len(jobs) > 1:
+        job_command = " ".join(
+            ["sh", os.fspath(deploy_array_wrapper_path), "$SGE_TASK_ID"]
+        )
+    else:
+        job_command = " ".join(["sh", os.fspath(deploy_array_wrapper_path), "1"])
 
     singularity_image = executable.singularity_image
     if singularity_image is not None:
