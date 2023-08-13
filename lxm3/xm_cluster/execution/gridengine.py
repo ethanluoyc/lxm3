@@ -293,8 +293,13 @@ def _create_array_wrapper(executable, jobs):
     )
 
 
-def _get_setup_cmds(executable: executables.Command):
+def _get_setup_cmds(executable: executables.Command, executor):
     cmds = ["hostname"]
+
+    if isinstance(executor, executors.GridEngine):
+        for module in executor.modules:
+            cmds.append(f"module load {module}")
+
     if executable.singularity_image is not None:
         cmds.append("singularity --version")
     return "\n".join(cmds)
@@ -338,7 +343,7 @@ def deploy_job_resources(artifact: artifacts.Artifact, jobs, version=None):
         job_command,
         _create_job_header(executor, jobs, job_script_dir, job_name),
         archives=[deploy_archive_path],
-        setup=_get_setup_cmds(executable),
+        setup=_get_setup_cmds(executable, executor),
     )
 
     # Put artifacts on the staging fs

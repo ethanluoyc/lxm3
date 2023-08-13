@@ -48,7 +48,9 @@ class ConfigTest(parameterized.TestCase):
 
         deploy_dir = self.create_tempdir(name="deploy")
 
-        executor = executors.GridEngine()
+        executor = executors.GridEngine(
+            modules=["singularity-env"],
+        )
         executable = cluster_executables.Command(
             name="test",
             entrypoint_command="echo hello",

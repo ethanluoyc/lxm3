@@ -59,6 +59,9 @@ class GridEngine(xm.Executor):
     project: Optional[str] = None
     account: Optional[str] = None
 
+    # Modules to load before running the job
+    modules: Sequence[str] = attr.Factory(list)
+
     max_parallel_tasks: Optional[int] = None
     extra_directives: Sequence[str] = attr.Factory(list)
     skip_directives: Sequence[str] = attr.Factory(list)
