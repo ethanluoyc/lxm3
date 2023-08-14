@@ -2,7 +2,9 @@ import datetime
 import os
 import shlex
 import shutil
-from typing import List, Union, Optional
+from typing import List, Optional, Union
+
+from absl import logging
 
 from lxm3 import xm
 from lxm3._vendor.xmanager.xm import job_blocks
@@ -11,6 +13,7 @@ from lxm3.xm_cluster import executables
 from lxm3.xm_cluster import executors
 from lxm3.xm_cluster.console import console
 from lxm3.xm_cluster.execution import artifacts
+from lxm3.xm_cluster import requirements as cluster_requirements
 
 _ARRAY_WRAPPER_TEMPLATE = """\
 %(shebang)s
@@ -160,14 +163,19 @@ def _generate_header_from_executor(
 
     header.append(f"#$ -N {job_name}")
 
-    for resource, value in executor.requirements.resources.items():
-        header.append(f"#$ -l {resource}={value}")
+    if executor.requirements.task_requirements:
+        logging.warning(
+            "Task requirements in GridEngine will be ignored."
+            "Please use GridEngine.resources for customizing resources."
+        )
 
     for resource, value in executor.resources.items():
-        header.append(f"#$ -l {resource}={value}")
+        if value:
+            header.append(f"#$ -l {resource}={value}")
 
     for pe_name, value in executor.parallel_environments.items():
-        header.append(f"#$ -pe {pe_name} {value}")
+        if value > 0:
+            header.append(f"#$ -pe {pe_name} {value}")
 
     if executor.walltime:
         if not isinstance(executor.walltime, str):
@@ -183,7 +191,8 @@ def _generate_header_from_executor(
     if reserved is None:
         if (
             executor.parallel_environments
-            or "gpu" in executor.requirements.resources
+            or cluster_requirements.ResourceType.GPU
+            in executor.requirements.task_requirements
             or "gpu" in executor.resources
         ):
             reserved = True
@@ -251,7 +260,8 @@ def _get_singulation_options(
     if isinstance(executor, executors.GridEngine):
         if (
             "gpu" in executor.parallel_environments
-            or "gpu" in executor.requirements.resources
+            or cluster_requirements.ResourceType.GPU
+            in executor.requirements.task_requirements
             or "gpu" in executor.resources
         ):
             result.append("--nv")
@@ -312,7 +322,8 @@ def _get_setup_cmds(executable: executables.Command, executor):
             cmds.append(f"module load {module}")
         if (
             "gpu" in executor.parallel_environments
-            or "gpu" in executor.requirements.resources
+            or cluster_requirements.ResourceType.GPU
+            in executor.requirements.task_requirements
             or "gpu" in executor.resources
         ):
             cmds.append("nvidia-smi")
@@ -395,7 +406,16 @@ async def launch(config, jobs: List[xm.Job]):
     if len(jobs) < 1:
         return []
 
-    cluster_config = config.cluster_config()
+    location = jobs[0].executor.requirements.location
+    for job in jobs[1:]:
+        executor = job.executor
+        if executor.requirements.location != location:
+            raise ValueError("All jobs must be launched on the same cluster.")
+
+    if location is None:
+        location = config.default_cluster()
+
+    cluster_config = config.cluster_config(location)
     storage_root = cluster_config["storage"]["staging"]
     hostname = cluster_config["server"]
     user = cluster_config["user"]

@@ -32,18 +32,19 @@ class Config(UserDict):
     def local_config(self):
         return self.data["local"]
 
+    def default_cluster(self):
+        cluster = os.environ.get("LXM_CLUSTER", None)
+        if cluster is None:
+            cluster = self.data["clusters"][0]["name"]
+        return cluster
+
     def cluster_config(self, location=None):
-        if location is None:
-            if os.environ.get("LXM_CLUSTER", None) is not None:
-                location = os.environ["LXM_CLUSTER"]
-        if location is None:
-            return self.data["clusters"][0]
-        else:
-            clusters = {cluster["name"]: cluster for cluster in self.data["clusters"]}
-            if location not in clusters:
-                raise ValueError("Unknown cluster")
-            cluster = clusters[location]
-            return cluster
+        location = location or self.default_cluster()
+        clusters = {cluster["name"]: cluster for cluster in self.data["clusters"]}
+        if location not in clusters:
+            raise ValueError("Unknown cluster")
+        cluster = clusters[location]
+        return cluster
 
 
 @functools.lru_cache()
