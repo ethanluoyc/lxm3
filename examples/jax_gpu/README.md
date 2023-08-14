@@ -140,3 +140,8 @@ Now let's try running the example on the cluster.
 ```bash
 lxm3 launch launcher.py -- --lxm_config lxm.toml --launch_on_cluster
 ```
+
+### 2.4 Run a batch job
+```bash
+lxm3 launch batch_launcher.py -- --lxm_config lxm.toml --launch_on_cluster
+```
