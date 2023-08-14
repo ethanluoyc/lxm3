@@ -4,6 +4,7 @@ from absl import flags
 
 from lxm3 import xm
 from lxm3 import xm_cluster
+from lxm3.contrib import ucl
 
 _LAUNCH_ON_CLUSTER = flags.DEFINE_boolean(
     "launch_on_cluster", False, "Launch on cluster"
@@ -16,24 +17,20 @@ _SINGULARITY_CONTAINER = flags.DEFINE_string(
 
 def main(_):
     with xm_cluster.create_experiment(experiment_title="basic") as experiment:
-        # It's actually not necessary to use a container, without it, we
-        # fallback to the current python environment for local executor and
-        # whatever Python environment picked up by the cluster for GridEngine.
-        # For remote execution, using the host environment is not recommended.
-        # as you may spend quite some time figuring out dependency problems than
-        # writing a simple Dockfiler/Singularity file.
-        singularity_container = _SINGULARITY_CONTAINER.value
+        if _GPU.value:
+            job_requirements = xm_cluster.JobRequirements(gpu=1, ram=8 * xm.GB)
+        else:
+            job_requirements = xm_cluster.JobRequirements(ram=8 * xm.GB)
         if _LAUNCH_ON_CLUSTER.value:
-            # There are more configuration for GridEngine, checkout the source code.
-            resources = dict(gpu=1, tmem=8 * xm.GB)
-            if not _GPU.value:
-                resources["h_vmem"] = resources["tmem"]
-            executor = xm_cluster.GridEngine(
-                resources=resources,
+            # This is a special case for using SGE in UCL where we use generic
+            # job requirements and translate to SGE specific requirements.
+            # Non-UCL users, use `xm_cluster.GridEngine directly`.
+            executor: xm_cluster.GridEngine = ucl.UclGridEngine(
+                job_requirements,
                 walltime=10 * xm.Min,
             )
         else:
-            executor = xm_cluster.Local()
+            executor = xm_cluster.Local(job_requirements)
 
         spec = xm_cluster.PythonPackage(
             # This is a relative path to the launcher that contains
@@ -46,6 +43,14 @@ def main(_):
         )
 
         # Wrap the python_package to be executing in a singularity container.
+        singularity_container = _SINGULARITY_CONTAINER.value
+
+        # It's actually not necessary to use a container, without it, we
+        # fallback to the current python environment for local executor and
+        # whatever Python environment picked up by the cluster for GridEngine.
+        # For remote execution, using the host environment is not recommended.
+        # as you may spend quite some time figuring out dependency problems than
+        # writing a simple Dockfiler/Singularity file.
         if singularity_container is not None:
             spec = xm_cluster.SingularityContainer(
                 spec,
