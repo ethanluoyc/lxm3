@@ -63,14 +63,22 @@ class Client:
             return subprocess.check_output(shlex.split(command), text=True)
         else:
             with self._lock:
-                _, stdout, _ = self._ssh.exec_command(command)  # type: ignore
-                stdout = stdout.read().decode()
+                _, stdout_, stderr_ = self._ssh.exec_command(command)  # type: ignore
+                retcode = stdout_.channel.recv_exit_status()
+                stderr = stderr_.read().decode()
+                stdout = stdout_.read().decode()
+                if retcode != 0:
+                    raise RuntimeError(
+                        f"Failed to run command: {command}\n"
+                        f"stdout:{stdout}\n"
+                        f"stderr:{stderr}"
+                    )
                 return stdout
 
-    def _submit_command(self, command):
+    def _submit_command(self, command: str):
         return self._run_command(f"qsub {command}")
 
-    def _cancel_command(self, job_id):
+    def _cancel_command(self, job_id: str):
         return self._run_command(f"qdel {job_id}")
 
     def cancel(self, job_id: str):
