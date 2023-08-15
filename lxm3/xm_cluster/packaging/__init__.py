@@ -6,7 +6,7 @@ import os
 import shutil
 import subprocess
 import tempfile
-from typing import Any, List
+from typing import Any, Sequence
 
 from absl import logging
 
@@ -46,7 +46,7 @@ def _create_archive(
             "Creating python package archive for {}".format(package_dir)
         ):
             try:
-                process = subprocess.run(
+                subprocess.run(
                     [
                         "pip",
                         "install",
@@ -60,10 +60,10 @@ def _create_archive(
                     check=True,
                     capture_output=True,
                 )
-            except subprocess.CalledProcessError:
+            except subprocess.CalledProcessError as e:
                 raise RuntimeError(
                     "Failed to package python package: {}. stdout\n{}\nstderr{}".format(
-                        package_dir, process.stdout, process.stderr
+                        package_dir, e.stdout, e.stderr
                     )
                 )
 
@@ -144,21 +144,9 @@ def _package_singularity_container(
     container: cluster_executable_specs.SingularityContainer,
     packageable: xm.Packageable,
 ):
-    py_package = container.entrypoint
-    assert isinstance(py_package, cluster_executable_specs.PythonPackage)
-    staging = tempfile.mkdtemp(dir=_staging_directory())
-    archive_name = _create_archive(staging, py_package)
-    local_archive_path = os.path.join(staging, archive_name)
-    entrypoint_cmd = _ENTRYPOINT
-
-    return cluster_executables.Command(
-        entrypoint_command=entrypoint_cmd,
-        resource_uri=local_archive_path,
-        name=py_package.name,
-        args=packageable.args,
-        env_vars=packageable.env_vars,
-        singularity_image=container.image_path,
-    )
+    executable = _package_python_package(container.entrypoint, packageable)
+    executable.singularity_image = container.image_path
+    return executable
 
 
 def _throw_on_unknown_executable(
@@ -178,5 +166,5 @@ _PACKAGING_ROUTER = pattern_matching.match(
 )
 
 
-def package(packageables: List[xm.Packageable]):
+def package(packageables: Sequence[xm.Packageable]):
     return [_PACKAGING_ROUTER(pkg.executable_spec, pkg) for pkg in packageables]

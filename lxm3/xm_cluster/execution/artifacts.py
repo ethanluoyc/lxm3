@@ -1,13 +1,13 @@
 import abc
-import os
-
-import subprocess
 import datetime
-import fsspec
+import os
+import subprocess
 from typing import List, Optional, Sequence
 
-from lxm3.xm_cluster.console import console
+import fsspec
 import rich.syntax
+
+from lxm3.xm_cluster.console import console
 
 
 def rsync(

@@ -2,18 +2,21 @@ import datetime
 import os
 import shlex
 import shutil
-from typing import List, Optional, Union
+from typing import Any, Dict, List, Optional, Sequence, Union
 
 from absl import logging
 
 from lxm3 import xm
 from lxm3._vendor.xmanager.xm import job_blocks
 from lxm3.clusters import gridengine
+from lxm3.xm_cluster import config as config_lib
 from lxm3.xm_cluster import executables
 from lxm3.xm_cluster import executors
+from lxm3.xm_cluster import requirements as cluster_requirements
 from lxm3.xm_cluster.console import console
 from lxm3.xm_cluster.execution import artifacts
-from lxm3.xm_cluster import requirements as cluster_requirements
+
+_SGE_TASK_OFFSET = 1
 
 _ARRAY_WRAPPER_TEMPLATE = """\
 %(shebang)s
@@ -44,8 +47,10 @@ __array_set_env_vars $TASK_ID
 exit $?
 """
 
+_WorkItem = Dict[str, Any]
 
-def _create_env_vars(env_vars_list):
+
+def _create_env_vars(env_vars_list: List[Dict[str, str]]) -> str:
     """Create the env_vars list."""
     lines = []
     first_keys = set(env_vars_list[0].keys())
@@ -67,7 +72,7 @@ def _create_env_vars(env_vars_list):
     return content
 
 
-def _create_args(args_list):
+def _create_args(args_list: List[List[str]]) -> str:
     """Create the args list."""
     if not args_list:
         return ":;"
@@ -85,18 +90,19 @@ def _create_args(args_list):
     return content
 
 
-def _get_cmd_str(cmd):
-    if isinstance(cmd, (list, tuple)):
+def _get_cmd_str(cmd: Union[str, Sequence[str]]) -> str:
+    if isinstance(cmd, str):
+        return cmd
+    else:
         return " ".join(list(map(shlex.quote, cmd)))
-    return cmd
 
 
 def create_array_wrapper_script(
-    cmd,
-    work_list,
-    task_offset,
+    cmd: Union[str, Sequence[str]],
+    work_list: List[_WorkItem],
+    task_offset: int,
     shebang="#!/usr/bin/env bash",
-):
+) -> str:
     """Create a wrapper script for running parameter sweep."""
     env_vars = _create_env_vars([work.get("env_vars", {}) for work in work_list])
     args = _create_args([work.get("args", []) for work in work_list])
@@ -111,7 +117,12 @@ def create_array_wrapper_script(
     return script
 
 
-def _create_job_script(cmd, header, archives=None, setup=""):
+def _create_job_script(
+    cmd: str,
+    header: str,
+    archives: Optional[List[str]] = None,
+    setup: str = "",
+) -> str:
     if archives is None:
         archives = []
     return """\
@@ -122,11 +133,11 @@ set -e
 
 _prepare_workdir() {
     WORKDIR=$(mktemp -t -d -u lxm-workdir.XXXXX)
-    echo "Prepare work directory: $WORKDIR"
+    echo >&2 "INFO[$(basename $0)]: Prepare work directory: $WORKDIR"
     mkdir -p $WORKDIR
 
     _cleanup() {
-        echo "Clean up work directory: $WORKDIR"
+        echo >&2 "INFO[$(basename $0)]: Clean up work directory: $WORKDIR"
         rm -rf $WORKDIR
     }
     trap _cleanup EXIT
@@ -158,7 +169,7 @@ def _generate_header_from_executor(
     executor: executors.GridEngine,
     num_array_tasks: Optional[int],
     job_script_dir: str,
-):
+) -> str:
     header = []
 
     header.append(f"#$ -N {job_name}")
@@ -245,9 +256,18 @@ def _generate_header_from_executor(
     return "\n".join(header)
 
 
+def _is_gpu_requested(executor: executors.GridEngine) -> bool:
+    return (
+        "gpu" in executor.parallel_environments
+        or cluster_requirements.ResourceType.GPU
+        in executor.requirements.task_requirements
+        or "gpu" in executor.resources
+    )
+
+
 def _get_singulation_options(
     executor: Union[executors.GridEngine, executors.Local]
-) -> str:
+) -> List[str]:
     options = executor.singularity_options or executors.SingularityOptions()
     result = []
 
@@ -258,12 +278,7 @@ def _get_singulation_options(
     result.extend(list(options.extra_options))
 
     if isinstance(executor, executors.GridEngine):
-        if (
-            "gpu" in executor.parallel_environments
-            or cluster_requirements.ResourceType.GPU
-            in executor.requirements.task_requirements
-            or "gpu" in executor.resources
-        ):
+        if _is_gpu_requested(executor):
             result.append("--nv")
     elif isinstance(executor, executors.Local):
         if shutil.which("nvidia-smi"):
@@ -274,7 +289,7 @@ def _get_singulation_options(
     return result
 
 
-def _validate_same_job_configuration(jobs):
+def _validate_same_job_configuration(jobs: List[xm.Job]):
     executable = jobs[0].executable
     executor = jobs[0].executor
     for job in jobs[1:]:
@@ -284,7 +299,12 @@ def _validate_same_job_configuration(jobs):
             raise ValueError("All jobs must have the same executor.")
 
 
-def _create_job_header(executor, jobs, job_script_dir, job_name):
+def _create_job_header(
+    executor: Union[executors.GridEngine, executors.Local],
+    jobs: List[xm.Job],
+    job_script_dir: str,
+    job_name: str,
+) -> str:
     if isinstance(executor, executors.GridEngine):
         num_array_tasks = len(jobs) if len(jobs) > 1 else None
         job_header = _generate_header_from_executor(
@@ -293,11 +313,13 @@ def _create_job_header(executor, jobs, job_script_dir, job_name):
 
     elif isinstance(executor, executors.Local):
         job_header = ""
+    else:
+        raise TypeError(f"Unsupported executor type {type(executor)}")
 
     return job_header
 
 
-def _create_array_wrapper(executable, jobs):
+def _create_array_wrapper(executable: executables.Command, jobs: List[xm.Job]):
     work_list = []
     for job in jobs:
         work_list.append(
@@ -310,31 +332,39 @@ def _create_array_wrapper(executable, jobs):
         )
 
     return create_array_wrapper_script(
-        cmd=executable.entrypoint_command, work_list=work_list, task_offset=1
+        cmd=executable.entrypoint_command,
+        work_list=work_list,
+        task_offset=_SGE_TASK_OFFSET,
     )
 
 
-def _get_setup_cmds(executable: executables.Command, executor):
-    cmds = ["hostname"]
+def _get_setup_cmds(
+    executable: executables.Command,
+    executor: Union[executors.GridEngine, executors.Local],
+) -> str:
+    cmds = ["echo >&2 INFO[$(basename $0)]: Running on host $(hostname)"]
 
     if isinstance(executor, executors.GridEngine):
         for module in executor.modules:
             cmds.append(f"module load {module}")
-        if (
-            "gpu" in executor.parallel_environments
-            or cluster_requirements.ResourceType.GPU
-            in executor.requirements.task_requirements
-            or "gpu" in executor.resources
-        ):
+        if _is_gpu_requested(executor):
+            cmds.append(
+                "echo >&2 INFO[$(basename $0)]: CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
+            )
             cmds.append("nvidia-smi")
-            cmds.append("echo CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES")
 
     if executable.singularity_image is not None:
-        cmds.append("singularity --version")
+        cmds.append(
+            "echo >&2 INFO[$(basename $0)]: Singularity version: $(singularity --version)"
+        )
     return "\n".join(cmds)
 
 
-def deploy_job_resources(artifact: artifacts.Artifact, jobs, version=None):
+def deploy_job_resources(
+    artifact: artifacts.Artifact,
+    jobs: List[xm.Job],
+    version: Optional[str] = None,
+) -> str:
     version = version or datetime.datetime.now().strftime("%Y%m%d.%H%M%S")
 
     executable = jobs[0].executable
@@ -402,13 +432,25 @@ class GridEngineHandle:
         raise NotImplementedError()
 
 
-async def launch(config, jobs: List[xm.Job]):
+async def launch(
+    config: config_lib.Config,
+    jobs: List[xm.Job],
+) -> List[GridEngineHandle]:
     if len(jobs) < 1:
         return []
+
+    if not isinstance(jobs[0].executor, executors.GridEngine):
+        raise ValueError(
+            "Only GridEngine executors are supported by the gridengine backend."
+        )
 
     location = jobs[0].executor.requirements.location
     for job in jobs[1:]:
         executor = job.executor
+        if not isinstance(executor, executors.GridEngine):
+            raise ValueError(
+                "Only GridEngine executors are supported by the gridengine backend."
+            )
         if executor.requirements.location != location:
             raise ValueError("All jobs must be launched on the same cluster.")
 

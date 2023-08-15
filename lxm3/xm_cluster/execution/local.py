@@ -3,17 +3,18 @@ import atexit
 import concurrent.futures
 import os
 import subprocess
-from typing import List
-import fsspec
+from typing import List, Optional
 
+import fsspec
 from absl import logging
 
 from lxm3 import xm
-from lxm3.xm_cluster.execution import gridengine
+from lxm3.xm_cluster import config as config_lib
 from lxm3.xm_cluster.console import console
 from lxm3.xm_cluster.execution import artifacts
+from lxm3.xm_cluster.execution import gridengine
 
-_LOCAL_EXECUTOR = None
+_LOCAL_EXECUTOR: Optional[concurrent.futures.ThreadPoolExecutor] = None
 
 
 def local_executor():
@@ -22,25 +23,26 @@ def local_executor():
         _LOCAL_EXECUTOR = concurrent.futures.ThreadPoolExecutor(1)
 
         def shutdown():
-            logging.debug("Shutting down local executor...")
-            _LOCAL_EXECUTOR.shutdown()
+            if _LOCAL_EXECUTOR is not None:
+                logging.debug("Shutting down local executor...")
+                _LOCAL_EXECUTOR.shutdown()
 
         atexit.register(shutdown)
     return _LOCAL_EXECUTOR
 
 
 class LocalExecutionHandle:
-    def __init__(self, future) -> None:
+    def __init__(self, future: concurrent.futures.Future) -> None:
         self.future = future
 
-    async def wait(self):
+    async def wait(self) -> None:
         return await asyncio.wrap_future(self.future)
 
-    async def monitor(self):
+    async def monitor(self) -> None:
         await asyncio.wrap_future(self.future)
 
 
-async def launch(config, jobs: List[xm.Job]):
+async def launch(config: config_lib.Config, jobs: List[xm.Job]):
     if len(jobs) < 1:
         return []
 

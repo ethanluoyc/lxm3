@@ -19,7 +19,7 @@ def register_version_parser(parsers: argparse._SubParsersAction):
     version_parser = parsers.add_parser(
         "version",
         help="Print version.",
-        inherited_absl_flags=None,
+        inherited_absl_flags=None,  # type: ignore
     )
     version_parser.set_defaults(command=version)
 
@@ -41,7 +41,7 @@ def register_launch_parser(parsers: argparse._SubParsersAction):
         "launch",
         help="Launch experiment.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        inherited_absl_flags=None,
+        inherited_absl_flags=None,  # type: ignore
         epilog=r"""
 examples:
 

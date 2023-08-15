@@ -4,10 +4,10 @@ from typing import List, NamedTuple, Union
 
 import attr
 
-from lxm3.xm import job_blocks
-from lxm3.xm import executables
-from lxm3.xm import utils
 from lxm3 import xm
+from lxm3.xm import executables
+from lxm3.xm import job_blocks
+from lxm3.xm import utils
 
 
 def name_from_path(path: str) -> str:

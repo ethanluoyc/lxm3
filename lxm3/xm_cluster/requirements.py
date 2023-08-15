@@ -1,3 +1,4 @@
+# type: ignore
 import enum
 import itertools
 from typing import (
@@ -184,7 +185,7 @@ class ResourceDict(MutableMapping):
         return self * rhs
 
 
-ResourceQuantity = Union[int, float, str]
+ResourceQuantity = Union[int, str]
 
 
 class JobRequirements:

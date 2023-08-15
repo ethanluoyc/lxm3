@@ -4,7 +4,7 @@ cluster-specific job requirements given more abstract requirements.
 
 This module currently only works with the CS HPC cluster and myriad.
 To use this, you need to set up the configuration file such that it includes
-a cluster named "cs" and a cluster named "myriad". 
+a cluster named "cs" and a cluster named "myriad".
 An example configuration looks like the following:
 
 ```
@@ -52,9 +52,10 @@ To understand the rules for translating for the two clusters, refer to `:ucl_tes
 
 """
 from typing import Optional
+
+from lxm3.xm_cluster import config
 from lxm3.xm_cluster import executors as cluster_executors
 from lxm3.xm_cluster import requirements as cluster_requirements
-from lxm3.xm_cluster import config
 
 
 def _myriad_executor_fn(requirements: cluster_requirements.JobRequirements, **kwargs):
@@ -105,6 +106,13 @@ def UclGridEngine(
     walltime: Optional[int] = None,
     **kwargs,
 ) -> cluster_executors.GridEngine:
+    """Create a UCL speicfic GridEngine executor.
+    Args:
+        requirements: The job requirements.
+        walltime: The walltime in seconds.
+        **kwargs: Additional arguments to pass to the executor.
+        See xm_cluster.GridEngine.
+    """
     executor_fns = {
         "myriad": _myriad_executor_fn,
         "cs": _cs_executor_fn,

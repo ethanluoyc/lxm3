@@ -1,3 +1,4 @@
+from lxm3.xm_cluster.config import Config
 from lxm3.xm_cluster.executable_specs import CommandList
 from lxm3.xm_cluster.executable_specs import Fileset
 from lxm3.xm_cluster.executable_specs import ModuleName
@@ -9,4 +10,3 @@ from lxm3.xm_cluster.executors import Local
 from lxm3.xm_cluster.experiment import ClusterExperiment
 from lxm3.xm_cluster.experiment import create_experiment
 from lxm3.xm_cluster.requirements import JobRequirements
-from lxm3.xm_cluster.config import Config

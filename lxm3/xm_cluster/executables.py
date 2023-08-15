@@ -1,5 +1,6 @@
-import attr
 from typing import Dict, Optional
+
+import attr
 
 from lxm3 import xm
 

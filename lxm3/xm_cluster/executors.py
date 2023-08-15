@@ -1,4 +1,4 @@
-from typing import Dict, Optional, Sequence, Union, Any
+from typing import Any, Dict, Optional, Sequence, Union
 
 import attr
 
@@ -13,6 +13,9 @@ class SingularityOptions(xm.ExecutorSpec):
     # Dict of the form {host_path: container_path}
     bind: Optional[Dict[str, str]] = None
     # Extra commandline options to pass to singularity
+    # NOTE:
+    # 1. lxm3 currently probably won't likely work with --contain, --pwd and -wd,
+    # 2. You don't have to pass --nv for gpu jobs, lxm3 will do it for you.
     extra_options: Sequence[str] = attr.Factory(list)
 
 

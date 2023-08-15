@@ -97,7 +97,13 @@ exclude = '''
 '''
 
 [tool.ruff]
-exclude = ["_vendor"]
+line-length = 120
+select = [
+  "E",   # pycodestyle
+  "F",   # pyflakes
+  "I",
+]
+exclude = ["_vendor", "xm"]
 
 [tool.ruff.extend-per-file-ignores]
 "__init__.py" = ["F401"]
@@ -122,3 +128,18 @@ exclude_lines = [
   "if __name__ == .__main__.:",
   "if TYPE_CHECKING:",
 ]
+
+[tool.pyright]
+include = ["lxm3"]
+exclude = [
+  "**/node_modules",
+  "**/__pycache__",
+  "lxm3/xm",
+  "lxm3/_vendor",
+]
+
+reportMissingImports = true
+reportMissingTypeStubs = false
+
+pythonVersion = "3.9"
+pythonPlatform = "Linux"

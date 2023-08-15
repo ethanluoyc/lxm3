@@ -1,15 +1,16 @@
+import logging
 import re
-import threading
 import shlex
 import subprocess
+import threading
+from typing import List, Optional
 
 import paramiko
-import logging
 
 logging.getLogger("paramiko.transport").setLevel(logging.WARNING)
 
 
-def parse_job_id(output):
+def parse_job_id(output: str) -> re.Match:
     match = re.search(
         r"(?P<job_id>\d+)(.?(?P<task_start>\d+)-(?P<task_end>\d+):(?P<task_step>\d+))?",
         output,
@@ -19,7 +20,7 @@ def parse_job_id(output):
     return match
 
 
-def split_job_ids(match):
+def split_job_ids(match: re.Match) -> List[str]:
     job_id = match.group("job_id")
     task_start = match.group("task_start")
     task_end = match.group("task_end")
@@ -34,19 +35,21 @@ def split_job_ids(match):
 
 
 class Client:
-    def __init__(self, hostname=None, username=None) -> None:
+    def __init__(
+        self, hostname: Optional[str] = None, username: Optional[str] = None
+    ) -> None:
         self._hostname = hostname
         self._username = username
         self._ssh = None
         if hostname is not None:
-            self._connect()
+            self._connect(hostname, username)
 
-    def _connect(self):
+    def _connect(self, hostname: str, username: Optional[str] = None):
         self._ssh = paramiko.SSHClient()
         self._ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy)
         self._ssh.load_system_host_keys()
         self._lock = threading.Lock()
-        self._ssh.connect(hostname=self._hostname, username=self._username)
+        self._ssh.connect(hostname=hostname, username=username)
 
     def close(self):
         if self._ssh is None:
@@ -58,7 +61,7 @@ class Client:
         match = parse_job_id(output)
         return match
 
-    def _run_command(self, command: str):
+    def _run_command(self, command: str) -> str:
         if self._ssh is None:
             return subprocess.check_output(shlex.split(command), text=True)
         else:
@@ -75,11 +78,11 @@ class Client:
                     )
                 return stdout
 
-    def _submit_command(self, command: str):
+    def _submit_command(self, command: str) -> str:
         return self._run_command(f"qsub {command}")
 
-    def _cancel_command(self, job_id: str):
+    def _cancel_command(self, job_id: str) -> str:
         return self._run_command(f"qdel {job_id}")
 
-    def cancel(self, job_id: str):
+    def cancel(self, job_id: str) -> None:
         self._cancel_command(job_id)

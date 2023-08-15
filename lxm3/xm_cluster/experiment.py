@@ -1,3 +1,4 @@
+# type: ignore # TODO: remove this
 import asyncio
 import contextlib
 import threading
@@ -14,9 +15,9 @@ from lxm3._vendor.xmanager.xm import pattern_matching as pm
 from lxm3.xm_cluster import config as config_lib
 from lxm3.xm_cluster import executors
 from lxm3.xm_cluster import packaging
+from lxm3.xm_cluster.console import console
 from lxm3.xm_cluster.execution import gridengine as gridengine_execution
 from lxm3.xm_cluster.execution import local as local_execution
-from lxm3.xm_cluster.console import console
 
 
 def _gridengine_job_predicate(job: xm.Job):
@@ -34,7 +35,7 @@ class _LaunchResult:
 
 
 async def _launch(jobs: List[xm.Job]):
-    experiment: ClusterExperiment = core._current_experiment.get()
+    experiment: ClusterExperiment = core._current_experiment.get()  # type: ignore
     gridengine_jobs = list(filter(_gridengine_job_predicate, jobs))
     local_jobs = list(filter(_local_job_predicate, jobs))
     if not (len(gridengine_jobs) == len(jobs) or len(local_jobs) == len(jobs)):
@@ -59,6 +60,8 @@ async def _launch(jobs: List[xm.Job]):
 
 class ClusterWorkUnit(xm.WorkUnit):
     """A mock version of WorkUnit with abstract methods implemented."""
+
+    experiment: "ClusterExperiment"
 
     def __init__(
         self,
@@ -88,7 +91,7 @@ class ClusterWorkUnit(xm.WorkUnit):
         """Appends the job group to the launched_jobs list."""
         del identity
 
-        async with self._work_unit_id_predictor.submit_id(self._work_unit_id):
+        async with self._work_unit_id_predictor.submit_id(self._work_unit_id):  # type: ignore
             await self._submit_job_for_execution(job_group.jobs, args)
 
         # This is used by batched experiment to wait for all jobs to be launched.

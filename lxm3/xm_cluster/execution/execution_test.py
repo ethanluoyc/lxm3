@@ -1,15 +1,16 @@
-from unittest.mock import patch
 import os
+from unittest.mock import patch
+
 import fsspec
 from absl.testing import absltest
 from absl.testing import parameterized
 
-from lxm3.xm_cluster.execution import gridengine
-from lxm3.xm_cluster.execution import artifacts
-from lxm3.xm_cluster import executors
-from lxm3.xm_cluster import executables as cluster_executables
-from lxm3.xm_cluster import JobRequirements
 from lxm3 import xm
+from lxm3.xm_cluster import JobRequirements
+from lxm3.xm_cluster import executables as cluster_executables
+from lxm3.xm_cluster import executors
+from lxm3.xm_cluster.execution import artifacts
+from lxm3.xm_cluster.execution import gridengine
 
 
 class ConfigTest(parameterized.TestCase):

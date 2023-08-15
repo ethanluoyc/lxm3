@@ -2,8 +2,8 @@ from absl.testing import absltest
 from absl.testing import parameterized
 
 from lxm3 import xm
-from lxm3.xm_cluster import requirements as cluster_requirements
 from lxm3.contrib import ucl
+from lxm3.xm_cluster import requirements as cluster_requirements
 
 
 class UCLClusterTest(parameterized.TestCase):
@@ -31,6 +31,12 @@ class UCLClusterTest(parameterized.TestCase):
             cluster_requirements.JobRequirements(gpu=0, ram=8 * xm.GB),
             {"tmem": 8 * xm.GB, "h_vmem": 8 * xm.GB},
             {},
+        ),
+        (
+            "cpu_2",
+            cluster_requirements.JobRequirements(gpu=0, cpu=2, ram=8 * xm.GB),
+            {"tmem": 8 * xm.GB, "h_vmem": 8 * xm.GB},
+            {"smp": 2},
         ),
     )
     def test_cs_cluster(self, requirements, expected_resources, expected_pe):
@@ -64,12 +70,23 @@ class UCLClusterTest(parameterized.TestCase):
             {"mem": 8 * xm.GB},
             {},
         ),
+        (
+            "cpu_2",
+            cluster_requirements.JobRequirements(gpu=0, cpu=2, ram=8 * xm.GB),
+            {"mem": 8 * xm.GB},
+            {"smp": 2},
+        ),
     )
     def test_myriad_cluster(self, requirements, expected_resources, expected_pe):
         requirements.location = "myriad"
         executor = ucl.UclGridEngine(requirements)
         self.assertEqual(executor.resources, expected_resources)
         self.assertEqual(executor.parallel_environments, expected_pe)
+
+    def test_invalid_location(self):
+        requirements = cluster_requirements.JobRequirements(location="unknown")
+        with self.assertRaises(ValueError):
+            ucl.UclGridEngine(requirements)
 
 
 if __name__ == "__main__":
