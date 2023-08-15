@@ -5,6 +5,7 @@ import subprocess
 from typing import List, Optional, Sequence
 
 import fsspec
+import rich.progress
 import rich.syntax
 
 from lxm3.xm_cluster.console import console
@@ -45,11 +46,12 @@ def rsync(
 
 
 class Artifact(abc.ABC):
-    def __init__(self, staging_directory: str, project=None):
+    def __init__(self, filesystem, staging_directory: str, project=None):
         if project:
             self._storage_root = os.path.join(staging_directory, "projects", project)
         else:
             self._storage_root = staging_directory
+        self._fs = filesystem
 
     def job_path(self, job_name: str):
         return os.path.join(self._storage_root, "jobs", job_name)
@@ -68,78 +70,80 @@ class Artifact(abc.ABC):
             self._storage_root, "archives", os.path.basename(resource_uri)
         )
 
-    @abc.abstractmethod
+    def _should_update(self, src: str, dst: str) -> bool:
+        if not self._fs.exists(dst):
+            return True
+
+        local_stat = os.stat(src)
+        local_mtime = datetime.datetime.utcfromtimestamp(
+            local_stat.st_mtime
+        ).timestamp()
+        storage_stat = self._fs.info(dst)
+        storage_mtime = storage_stat["mtime"]
+
+        if isinstance(storage_mtime, datetime.datetime):
+            storage_mtime = storage_mtime.timestamp()
+
+        if local_stat.st_size != storage_stat["size"]:
+            return True
+
+        if int(local_mtime) > int(storage_mtime):
+            return True
+
+        return False
+
+    def _put_content(self, dst, content):
+        self._fs.makedirs(os.path.dirname(dst), exist_ok=True)
+
+        with self._fs.open(dst, "wt") as f:
+            f.write(content)
+
+    def _put_file(self, local_filename, dst):
+        self._fs.makedirs(os.path.dirname(dst), exist_ok=True)
+        self._fs.put(local_filename, dst)
+
     def deploy_job_scripts(self, job_name, job_script, array_wrapper):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def deploy_singularity_container(self, singularity_image):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def deploy_resource_archive(self, resource_uri):
-        raise NotImplementedError()
-
-
-class LocalArtifact(Artifact):
-    def __init__(self, filesystem, staging_directory: str, project=None):
-        super().__init__(staging_directory, project)
-        if not os.path.exists(staging_directory):
-            os.makedirs(staging_directory)
-            # Create a .gitignore file to prevent git from tracking the directory
-            with open(os.path.join(staging_directory, ".gitignore"), "wt") as f:
-                f.write("*\n")
-        self._fs = filesystem
-
-    def deploy_job_scripts(self, job_name, job_script, array_wrapper):
-        def deploy_file(path, content):
-            with self._fs.open(path, "wt") as f:
-                f.write(content)
-
         job_path = self.job_path(job_name)
         job_log_path = os.path.join(job_path, "logs")
 
         self._fs.makedirs(job_path, exist_ok=True)
         self._fs.makedirs(job_log_path, exist_ok=True)
-        deploy_file(self.job_script_path(job_name), job_script)
-        deploy_file(self.job_array_wrapper_path(job_name), array_wrapper)
+        self._put_content(self.job_script_path(job_name), job_script)
+        self._put_content(self.job_array_wrapper_path(job_name), array_wrapper)
         console.log(f"Created job script {self.job_script_path(job_name)}")
 
     def deploy_singularity_container(self, singularity_image):
-        fs = self._fs
-
         image_name = os.path.basename(singularity_image)
         deploy_container_path = self.singularity_image_path(image_name)
-        if not fs.exists(deploy_container_path):
-            console.log(f"Uploading container {image_name}...")
-            fs.makedirs(os.path.dirname(deploy_container_path), exist_ok=True)
-            fs.put(singularity_image, deploy_container_path)
+        should_update = self._should_update(singularity_image, deploy_container_path)
+        if should_update:
+            self._fs.makedirs(os.path.dirname(deploy_container_path), exist_ok=True)
+            self._put_file(singularity_image, deploy_container_path)
             console.log(f"Deployed Singularity container to {deploy_container_path}")
         else:
-            if fs.modified(deploy_container_path) < datetime.datetime.fromtimestamp(
-                os.path.getmtime(singularity_image)
-            ):
-                console.log(
-                    f"Local container is newer. Uploading container {image_name}..."
-                )
-                fs.put(singularity_image, deploy_container_path)
-                console.log(
-                    f"Deployed Singularity container to {deploy_container_path}"
-                )
-            else:
-                console.log(f"Container {deploy_container_path} exists, skip upload.")
+            console.log(f"Container {deploy_container_path} exists, skip upload.")
         return deploy_container_path
 
     def deploy_resource_archive(self, resource_uri):
         deploy_archive_path = self.archive_path(resource_uri)
 
-        if not self._fs.exists(deploy_archive_path):
-            self._fs.makedirs(os.path.dirname(deploy_archive_path), exist_ok=True)
-            self._fs.put_file(resource_uri, deploy_archive_path)
+        should_update = self._should_update(resource_uri, deploy_archive_path)
+        if should_update:
+            self._put_file(resource_uri, deploy_archive_path)
             console.log(f"Deployed archive to {deploy_archive_path}")
         else:
             console.log(f"Archive {deploy_archive_path} exists, skipping upload.")
         return deploy_archive_path
+
+
+class LocalArtifact(Artifact):
+    def __init__(self, staging_directory: str, project=None):
+        if not os.path.exists(staging_directory):
+            os.makedirs(staging_directory)
+            # Create a .gitignore file to prevent git from tracking the directory
+            with open(os.path.join(staging_directory, ".gitignore"), "wt") as f:
+                f.write("*\n")
+        super().__init__(fsspec.filesystem("file"), staging_directory, project)
 
 
 class RemoteArtifact(Artifact):
@@ -150,67 +154,40 @@ class RemoteArtifact(Artifact):
         self._user = user
         if not os.path.isabs(staging_directory):
             staging_directory = fs.ftp.normalize(staging_directory)
-        super().__init__(staging_directory, project)
-        self._fs = fs
-
-    def deploy_job_scripts(self, job_name, job_script, array_wrapper):
-        def deploy_file(path, content):
-            with self._fs.open(path, "wt") as f:
-                f.write(content)
-
-        job_path = self.job_path(job_name)
-        job_log_path = os.path.join(job_path, "logs")
-
-        self._fs.makedirs(job_path, exist_ok=True)
-        self._fs.makedirs(job_log_path, exist_ok=True)
-        deploy_file(self.job_script_path(job_name), job_script)
-        deploy_file(self.job_array_wrapper_path(job_name), array_wrapper)
-        console.log(f"Created job script {self.job_script_path(job_name)}")
+        super().__init__(fs, staging_directory, project)
 
     def deploy_singularity_container(self, singularity_image):
-        fs = self._fs
-
         image_name = os.path.basename(singularity_image)
         deploy_container_path = self.singularity_image_path(image_name)
-        if not fs.exists(deploy_container_path):
-            console.log(f"Uploading container {singularity_image}...")
-            fs.makedirs(os.path.dirname(deploy_container_path), exist_ok=True)
-            rsync(
-                singularity_image,
-                deploy_container_path,
-                opt=["--info=progress2", "-havz"],
-                host=f"{self._user}@{self._host}",
-            )
-            console.log(f"Deployed Singularity container to {deploy_container_path}")
-        else:
-            if fs.info(deploy_container_path)[
-                "mtime"
-            ] < datetime.datetime.fromtimestamp(os.path.getmtime(singularity_image)):
-                console.log(
-                    f"Local container is newer. Uploading container {image_name}..."
+        should_update = self._should_update(singularity_image, deploy_container_path)
+        if should_update:
+            with rich.progress.Progress(
+                rich.progress.TextColumn("[progress.description]{task.description}"),
+                rich.progress.BarColumn(),
+                rich.progress.TaskProgressColumn(),
+                rich.progress.TimeRemainingColumn(),
+                rich.progress.TransferSpeedColumn(),
+                console=console,
+            ) as progress:
+                self._fs.makedirs(os.path.dirname(deploy_container_path), exist_ok=True)
+
+                task = progress.add_task(
+                    f"Uploading {os.path.basename(singularity_image)}"
                 )
-                rsync(
+
+                def callback(transferred_bytes: int, total_bytes: int):
+                    progress.update(
+                        task, completed=transferred_bytes, total=total_bytes
+                    )
+
+                self._fs.ftp.put(
                     singularity_image,
                     deploy_container_path,
-                    opt=["--info=progress2", "-havz"],
-                    host=f"{self._user}@{self._host}",
+                    callback=callback,
+                    confirm=True,
                 )
-                console.log(
-                    f"Deployed Singularity container to {deploy_container_path}"
-                )
-            else:
-                console.log(
-                    f"Container {deploy_container_path} exists, skipping upload."
-                )
-        return deploy_container_path
+                progress.update(task, description="Done!")
 
-    def deploy_resource_archive(self, resource_uri):
-        deploy_archive_path = self.archive_path(resource_uri)
-
-        if not self._fs.exists(deploy_archive_path):
-            self._fs.makedirs(os.path.dirname(deploy_archive_path), exist_ok=True)
-            self._fs.put_file(resource_uri, deploy_archive_path)
-            console.log(f"Deployed archive to {deploy_archive_path}")
         else:
-            console.log(f"Archive {deploy_archive_path} exists, skipping upload.")
-        return deploy_archive_path
+            console.log(f"Container {deploy_container_path} exists, skip upload.")
+        return deploy_container_path

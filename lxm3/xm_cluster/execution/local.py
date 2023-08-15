@@ -5,7 +5,6 @@ import os
 import subprocess
 from typing import List, Optional
 
-import fsspec
 from absl import logging
 
 from lxm3 import xm
@@ -50,9 +49,8 @@ async def launch(config: config_lib.Config, jobs: List[xm.Job]):
     storage_root = os.path.abspath(
         os.path.expanduser(local_config["storage"]["staging"])
     )
-    fs = fsspec.filesystem("file")
 
-    artifact = artifacts.LocalArtifact(fs, storage_root, project=config.project())
+    artifact = artifacts.LocalArtifact(storage_root, project=config.project())
     job_script_path = gridengine.deploy_job_resources(artifact, jobs)
 
     console.print(f"Launching {len(jobs)} jobs locally...")

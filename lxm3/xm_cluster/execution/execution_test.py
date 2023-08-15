@@ -1,7 +1,6 @@
 import os
 from unittest.mock import patch
 
-import fsspec
 from absl.testing import absltest
 from absl.testing import parameterized
 
@@ -60,9 +59,8 @@ class ConfigTest(parameterized.TestCase):
         )
         version = "1"
 
-        fs = fsspec.filesystem("file")
         job = xm.Job(executable, executor, name="test")
-        artifact = artifacts.LocalArtifact(fs, deploy_dir.full_path)
+        artifact = artifacts.LocalArtifact(deploy_dir.full_path)
         gridengine.deploy_job_resources(artifact, [job], version=version)
         expected_paths = [
             f"containers/{container_name}",
