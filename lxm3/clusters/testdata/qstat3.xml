@@ -1,0 +1,62 @@
+<?xml version='1.0'?>
+<job_info  xmlns:xsd="http://arc.liv.ac.uk/repos/darcs/sge/source/dist/util/resources/schemas/qstat/qstat.xsd">
+  <queue_info>
+    <job_list state="running">
+      <JB_job_number>9830197</JB_job_number>
+      <JAT_prio>0.50307</JAT_prio>
+      <JB_name>MyTESTJOBNAME</JB_name>
+      <JB_owner>yicheluo</JB_owner>
+      <state>r</state>
+      <JAT_start_time>2023-02-23T22:14:39</JAT_start_time>
+      <queue_name>test.q@abner-601-2.local</queue_name>
+      <slots>1</slots>
+      <tasks>1</tasks>
+    </job_list>
+    <job_list state="running">
+      <JB_job_number>9830197</JB_job_number>
+      <JAT_prio>0.50307</JAT_prio>
+      <JB_name>MyTESTJOBNAME</JB_name>
+      <JB_owner>yicheluo</JB_owner>
+      <state>r</state>
+      <JAT_start_time>2023-02-23T22:14:39</JAT_start_time>
+      <queue_name>test.q@abner-601-2.local</queue_name>
+      <slots>1</slots>
+      <tasks>2</tasks>
+    </job_list>
+    <job_list state="running">
+      <JB_job_number>9830197</JB_job_number>
+      <JAT_prio>0.50307</JAT_prio>
+      <JB_name>MyTESTJOBNAME</JB_name>
+      <JB_owner>yicheluo</JB_owner>
+      <state>r</state>
+      <JAT_start_time>2023-02-23T22:14:39</JAT_start_time>
+      <queue_name>test.q@abner-601-2.local</queue_name>
+      <slots>1</slots>
+      <tasks>3</tasks>
+    </job_list>
+    <job_list state="running">
+      <JB_job_number>9830197</JB_job_number>
+      <JAT_prio>0.50307</JAT_prio>
+      <JB_name>MyTESTJOBNAME</JB_name>
+      <JB_owner>yicheluo</JB_owner>
+      <state>r</state>
+      <JAT_start_time>2023-02-23T22:14:39</JAT_start_time>
+      <queue_name>test.q@abner-601-2.local</queue_name>
+      <slots>1</slots>
+      <tasks>4</tasks>
+    </job_list>
+    <job_list state="running">
+      <JB_job_number>9830197</JB_job_number>
+      <JAT_prio>0.50307</JAT_prio>
+      <JB_name>MyTESTJOBNAME</JB_name>
+      <JB_owner>yicheluo</JB_owner>
+      <state>r</state>
+      <JAT_start_time>2023-02-23T22:14:39</JAT_start_time>
+      <queue_name>test.q@abner-601-2.local</queue_name>
+      <slots>1</slots>
+      <tasks>5</tasks>
+    </job_list>
+  </queue_info>
+  <job_info>
+  </job_info>
+</job_info>

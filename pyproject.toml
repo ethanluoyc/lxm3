@@ -30,21 +30,38 @@ dependencies = [
   "async_generator",
   "immutabledict",
   "rich",
-  "vcsinfo"
+  "vcsinfo",
 ]
 
 [project.scripts]
 lxm3 = "lxm3.cli.cli:entrypoint"
 
+[project.optional-dependencies]
+shell = [
+  "fabric",
+  "IPython"
+]
+
+
 [tool.hatch.envs.default]
+features = [
+  "shell"
+]
 dependencies = [
   "coverage[toml]>=6.5",
   "pytest",
-  "pre-commit"
+  "pre-commit",
+  "fabric",
 ]
 
 [tool.hatch.version]
 source = "vcs"
+
+[tool.hatch.build]
+exclude = [
+  "lxm3/clusters/testdata",
+  "*_test.py",
+]
 
 [tool.hatch.envs.default.scripts]
 test = "pytest {args:lxm3}"

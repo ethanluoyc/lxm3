@@ -1,0 +1,93 @@
+==============================================================
+qname        test.q
+hostname     abner-601-2.local
+group        cs_postgrad
+owner        yicheluo
+project      csml
+department   foundai
+jobname      MyTESTJOBNAME
+jobnumber    3871
+taskid       undefined
+account      sge
+priority     0
+qsub_time    Thu Aug  3 13:16:49 2023
+start_time   Thu Aug  3 13:24:14 2023
+end_time     Thu Aug  3 13:24:14 2023
+granted_pe   NONE
+slots        1
+failed       0
+exit_status  0
+ru_wallclock 0s
+ru_utime     0.133s
+ru_stime     0.146s
+ru_maxrss    2.824KB
+ru_ixrss     0.000B
+ru_ismrss    0.000B
+ru_idrss     0.000B
+ru_isrss     0.000B
+ru_minflt    41386
+ru_majflt    2
+ru_nswap     0
+ru_inblock   120
+ru_oublock   64
+ru_msgsnd    0
+ru_msgrcv    0
+ru_nsignals  0
+ru_nvcsw     378
+ru_nivcsw    92
+cpu          0.279s
+mem          0.000Bs
+io           0.000B
+iow          0.000s
+maxvmem      0.000B
+arid         undefined
+ar_sub_time  undefined
+category     -U foundai -l h_rt=600,h_vmem=1G,tmem=1G -P csml
+==============================================================
+qname        gpu.q
+hostname     sweetums-609-4.local
+group        cs_postgrad
+owner        yicheluo
+project      csml
+department   foundai
+jobname      job-20230815.154532
+jobnumber    5338
+taskid       18
+account      sge
+priority     0
+qsub_time    Tue Aug 15 15:45:33 2023
+start_time   Tue Aug 15 18:50:45 2023
+end_time     Wed Aug 16 03:09:24 2023
+granted_pe   NONE
+slots        1
+failed       0
+exit_status  0
+ru_wallclock 29919s
+ru_utime     51987.789s
+ru_stime     10315.417s
+ru_maxrss    5.437MB
+ru_ixrss     0.000B
+ru_ismrss    0.000B
+ru_idrss     0.000B
+ru_isrss     0.000B
+ru_minflt    1895607387
+ru_majflt    3246
+ru_nswap     0
+ru_inblock   508944
+ru_oublock   293184
+ru_msgsnd    0
+ru_msgrcv    0
+ru_nsignals  0
+ru_nvcsw     514235704
+ru_nivcsw    1569627
+cpu          62303.206s
+mem          289.882TBs
+io           16.621GB
+iow          0.000s
+maxvmem      5.558GB
+arid         undefined
+ar_sub_time  undefined
+category     -U foundai -l gpu=true,h_rt=72000,tmem=16000000000 -P csml
+OWNER        WALLCLOCK         UTIME         STIME           CPU             MEMORY                 IO                IOW
+=========================================================================================================================
+yicheluo       1434385   1395226.227    243370.955   2986933.809       13861511.811            373.139              0.000

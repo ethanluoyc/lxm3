@@ -36,6 +36,13 @@ def launch(args):
     sys.path.pop(0)
 
 
+def shell(args):
+    del args
+    from lxm3.cli.shell import main
+
+    app.run(main)
+
+
 def register_launch_parser(parsers: argparse._SubParsersAction):
     launch_parser = parsers.add_parser(
         "launch",
@@ -66,6 +73,15 @@ examples:
     launch_parser.set_defaults(command=launch)
 
 
+def register_shell_parser(parsers: argparse._SubParsersAction):
+    launch_parser = parsers.add_parser(
+        "shell",
+        help="Open a shell.",
+        inherited_absl_flags=None,  # type: ignore
+    )
+    launch_parser.set_defaults(command=shell)
+
+
 def _parse_flags(argv):
     parser = argparse_flags.ArgumentParser(description="lxm3 experiment scheduler.")
     parser.set_defaults(command=lambda _: parser.print_help())
@@ -74,6 +90,7 @@ def _parse_flags(argv):
 
     register_version_parser(subparsers)
     register_launch_parser(subparsers)
+    register_shell_parser(subparsers)
 
     args = parser.parse_args(argv[1:])
     return args
