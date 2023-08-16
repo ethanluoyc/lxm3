@@ -468,6 +468,9 @@ async def launch(
 
     console.log(f"Launch with command:\n  qsub {job_script_path}")
     group = client.launch(job_script_path)
+    artifact._fs.write_text(
+        os.path.join(os.path.dirname(job_script_path), "job_id"), f"{group.group(0)}\n"
+    )
     console.log(f"Successfully launched job {group.group(0)}")
     job_ids = gridengine.split_job_ids(group)
 
