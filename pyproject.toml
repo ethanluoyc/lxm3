@@ -30,6 +30,7 @@ dependencies = [
   "async_generator",
   "immutabledict",
   "rich",
+  "vcsinfo"
 ]
 
 [project.scripts]

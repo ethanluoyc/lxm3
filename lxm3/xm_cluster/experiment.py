@@ -1,10 +1,15 @@
 # type: ignore # TODO: remove this
 import asyncio
 import contextlib
+import functools
+import subprocess
 import threading
 import time
 from concurrent import futures
 from typing import Any, Awaitable, Callable, List, Mapping, Optional
+
+import vcsinfo
+from absl import logging
 
 from lxm3._vendor.xmanager import xm
 from lxm3._vendor.xmanager.xm import async_packager
@@ -14,6 +19,7 @@ from lxm3._vendor.xmanager.xm import job_blocks
 from lxm3._vendor.xmanager.xm import pattern_matching as pm
 from lxm3.xm_cluster import config as config_lib
 from lxm3.xm_cluster import executors
+from lxm3.xm_cluster import metadata
 from lxm3.xm_cluster import packaging
 from lxm3.xm_cluster.console import console
 from lxm3.xm_cluster.execution import gridengine as gridengine_execution
@@ -129,13 +135,22 @@ class ClusterWorkUnit(xm.WorkUnit):
     def experiment_unit_name(self) -> str:
         return f"{self.experiment_id}_{self._work_unit_id}"
 
+    @property
+    def context(self) -> metadata.ClusterMetadataContext:
+        return metadata.ClusterMetadataContext()
+
 
 class ClusterExperiment(xm.Experiment):
     """A mock version of Experiment with abstract methods implemented."""
 
     _async_packager = async_packager.AsyncPackager(packaging.package)
 
-    def __init__(self, experiment_title: str, config: Mapping[str, Any]) -> None:
+    def __init__(
+        self,
+        experiment_title: str,
+        config: Mapping[str, Any],
+        vcs: Optional[vcsinfo.VCS] = None,
+    ) -> None:
         super().__init__()
         self.launched_jobs = []
         self.launched_jobs_args = []
@@ -146,6 +161,7 @@ class ClusterExperiment(xm.Experiment):
         self.delayed_jobs = []
         self._experiment_title = experiment_title
         self._config = config
+        self._vcs = vcs
 
     def is_in_batch(self):
         with self._in_batch_lock:
@@ -264,8 +280,34 @@ class ClusterExperiment(xm.Experiment):
     def experiment_id(self) -> int:
         return self._experiment_id
 
+    @property
+    def context(self) -> metadata.ClusterMetadataContext:
+        return metadata.ClusterMetadataContext()
 
-def create_experiment(experiment_title: str = "", config=None):
+
+@functools.lru_cache()
+def _load_vcsinfo() -> Optional[vcsinfo.VCS]:
+    vcs = None
+
+    try:
+        vcs_root = subprocess.check_output(
+            ["git", "rev-parse", "--show-toplevel"], text=True
+        ).strip()
+        vcs = vcsinfo.detect_vcs(vcs_root)
+    except subprocess.SubprocessError:
+        logging.debug("Failed to detect VCS info")
+
+    return vcs
+
+
+def create_experiment(
+    experiment_title: str,
+    config: Optional[config_lib.Config] = None,
+):
     config = config or config_lib.default()
+    vcs = _load_vcsinfo()
+
+    if not config.project() and vcs is not None:
+        config.data["project"] = vcs.name
 
     return ClusterExperiment(experiment_title, config=config)
