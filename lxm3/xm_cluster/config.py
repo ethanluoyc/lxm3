@@ -3,7 +3,7 @@ import os
 from collections import UserDict
 
 import appdirs
-import tomli
+import tomlkit
 from absl import flags
 
 LXM_CONFIG = flags.DEFINE_string(
@@ -15,12 +15,12 @@ class Config(UserDict):
     @classmethod
     def from_file(cls, path: str) -> "Config":
         with open(path, "rt") as f:
-            config_dict = tomli.loads(f.read())
+            config_dict = tomlkit.loads(f.read())
         return cls(config_dict)
 
     @classmethod
     def from_string(cls, content: str) -> "Config":
-        config_dict = tomli.loads(content)
+        config_dict = tomlkit.loads(content)
         return cls(config_dict)
 
     def project(self):

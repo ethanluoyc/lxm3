@@ -23,7 +23,7 @@ dependencies = [
   "absl-py",
   "attrs",
   "ml_collections",
-  "tomli",
+  "tomlkit",
   "paramiko",
   "appdirs",
   "fsspec",
@@ -50,6 +50,7 @@ features = [
 dependencies = [
   "coverage[toml]>=6.5",
   "pytest",
+  "pytest-cov",
   "pre-commit",
   "fabric",
 ]
@@ -59,20 +60,16 @@ source = "vcs"
 
 [tool.hatch.build]
 exclude = [
-  "lxm3/clusters/testdata",
+  "tests",
   "*_test.py",
 ]
 
 [tool.hatch.envs.default.scripts]
-test = "pytest {args:lxm3}"
-test-cov = "coverage run -m pytest {args:lxm3}"
-cov-report = [
-  "- coverage combine",
-  "coverage report",
-]
+test = "pytest {args:lxm3 tests}"
+test-cov = "pytest --cov=lxm3 --cov-report=xml tests"
 cov = [
   "test-cov",
-  "cov-report",
+  "coverage report"
 ]
 
 [[tool.hatch.envs.all.matrix]]
@@ -138,7 +135,7 @@ ban-relative-imports = "all"
 source = ["lxm3", "*/lxm3/lxm3"]
 
 [tool.coverage.run]
-omit = ["lxm3/_vendor/*"]
+omit = ["lxm3/_vendor/*", "tests/*", "conftest.py"]
 
 [tool.coverage.report]
 exclude_lines = [

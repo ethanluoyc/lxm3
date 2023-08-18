@@ -1,57 +1,32 @@
 import abc
 import datetime
 import os
-import subprocess
-from typing import List, Optional, Sequence
+from typing import Optional
 
 import fsspec
 import rich.progress
 import rich.syntax
+from fsspec.implementations.sftp import SFTPFileSystem
 
 from lxm3.xm_cluster.console import console
 
 
-def rsync(
-    src: str,
-    dst: str,
-    opt: List[str],
-    host: Optional[str] = None,
-    excludes: Optional[Sequence[str]] = None,
-    filters: Optional[Sequence[str]] = None,
-    mkdirs: bool = False,
-):
-    if excludes is None:
-        excludes = []
-    if filters is None:
-        filters = []
-    opt = list(opt)
-    for exclude in excludes:
-        opt.append(f"--exclude={exclude}")
-    for filter in filters:
-        opt.append(f"--filter=:- {filter}")
-    if not host:
-        os.makedirs(os.path.dirname(dst), exist_ok=True)
-        sync_cmd = ["rsync"] + opt + [src, dst]
-        console.log("Running", " ".join(sync_cmd))
-        subprocess.check_call(sync_cmd)
-    else:
-        if mkdirs:
-            subprocess.check_output(["ssh", host, "mkdir", "-p", os.path.dirname(dst)])
-        dst = f"{host}:{dst}"
-        sync_cmd = ["rsync"] + opt + [src, dst]
-        console.log(
-            rich.syntax.Syntax(f"rsync {' '.join(opt)} \\\n  {src} \\\n  {dst}", "bash")
-        )
-        subprocess.check_call(sync_cmd)
-
-
 class Artifact(abc.ABC):
-    def __init__(self, filesystem, staging_directory: str, project=None):
+    def __init__(
+        self,
+        filesystem: fsspec.AbstractFileSystem,
+        staging_directory: str,
+        project: Optional[str] = None,
+    ):
         if project:
             self._storage_root = os.path.join(staging_directory, "projects", project)
         else:
             self._storage_root = staging_directory
         self._fs = filesystem
+        self._initialize()
+
+    def _initialize(self):
+        pass
 
     def job_path(self, job_name: str):
         return os.path.join(self._storage_root, "jobs", job_name)
@@ -138,16 +113,40 @@ class Artifact(abc.ABC):
 
 class LocalArtifact(Artifact):
     def __init__(self, staging_directory: str, project=None):
-        if not os.path.exists(staging_directory):
-            os.makedirs(staging_directory)
-            # Create a .gitignore file to prevent git from tracking the directory
-            with open(os.path.join(staging_directory, ".gitignore"), "wt") as f:
-                f.write("*\n")
+        staging_directory = os.path.abspath(os.path.expanduser(staging_directory))
         super().__init__(fsspec.filesystem("file"), staging_directory, project)
+
+    def _initialize(self):
+        if not os.path.exists(self._storage_root):
+            self._fs.makedirs(self._storage_root)
+            # Create a .gitignore file to prevent git from tracking the directory
+            self._fs.write_text(os.path.join(self._storage_root, ".gitignore"), "*\n")
+
+    def deploy_singularity_container(self, singularity_image):
+        image_name = os.path.basename(singularity_image)
+        deploy_container_path = self.singularity_image_path(image_name)
+        should_update = self._should_update(singularity_image, deploy_container_path)
+        if should_update:
+            self._fs.makedirs(os.path.dirname(deploy_container_path), exist_ok=True)
+            if os.path.exists(deploy_container_path):
+                os.unlink(deploy_container_path)
+            self._put_file(singularity_image, deploy_container_path)
+            console.log(f"Deployed Singularity container to {deploy_container_path}")
+        else:
+            console.log(f"Container {deploy_container_path} exists, skip upload.")
+        return deploy_container_path
 
 
 class RemoteArtifact(Artifact):
-    def __init__(self, hostname, user, staging_directory: str, project=None):
+    _fs: SFTPFileSystem
+
+    def __init__(
+        self,
+        hostname: str,
+        user: Optional[str],
+        staging_directory: str,
+        project: Optional[str] = None,
+    ):
         fs = fsspec.filesystem("sftp", host=hostname, username=user)
         # Normalize the storage root to an absolute path.
         self._host = hostname
@@ -191,3 +190,15 @@ class RemoteArtifact(Artifact):
         else:
             console.log(f"Container {deploy_container_path} exists, skip upload.")
         return deploy_container_path
+
+
+def create_artifact_store(
+    storage_root: str,
+    hostname: Optional[str] = None,
+    user: Optional[str] = None,
+    project: Optional[str] = None,
+):
+    if hostname is None:
+        return LocalArtifact(storage_root, project=project)
+    else:
+        return RemoteArtifact(hostname, user, storage_root, project=project)
