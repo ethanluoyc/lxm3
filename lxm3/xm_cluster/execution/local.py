@@ -1,7 +1,9 @@
 import asyncio
 import atexit
 import concurrent.futures
+import datetime
 import os
+import shutil
 import subprocess
 from typing import List, Optional
 
@@ -9,11 +11,18 @@ from absl import logging
 
 from lxm3 import xm
 from lxm3.xm_cluster import config as config_lib
+from lxm3.xm_cluster import executables
+from lxm3.xm_cluster import executors
 from lxm3.xm_cluster.console import console
 from lxm3.xm_cluster.execution import artifacts
-from lxm3.xm_cluster.execution import gridengine
+from lxm3.xm_cluster.execution import common
+from lxm3.xm_cluster.execution import job_script
 
 _LOCAL_EXECUTOR: Optional[concurrent.futures.ThreadPoolExecutor] = None
+
+_TASK_OFFSET = 1
+_JOB_SCRIPT_SHEBANG = "#!/usr/bin/env bash"
+_TASK_ID_VAR_NAME = "SGE_TASK_ID"
 
 
 def local_executor():
@@ -28,6 +37,67 @@ def local_executor():
 
         atexit.register(shutdown)
     return _LOCAL_EXECUTOR
+
+
+def _is_gpu_requested(executor: executors.Local) -> bool:
+    return shutil.which("nvidia-smi") is not None
+
+
+def _create_job_header(
+    executor: executors.Local, jobs: List[xm.Job], job_script_dir: str, job_name: str
+) -> str:
+    return ""
+
+
+def _get_setup_cmds(
+    executable: executables.Command,
+    executor: executors.Local,
+) -> str:
+    del executor
+    cmds = ["echo >&2 INFO[$(basename $0)]: Running on host $(hostname)"]
+
+    if executable.singularity_image is not None:
+        cmds.append(
+            "echo >&2 INFO[$(basename $0)]: Singularity version: $(singularity --version)"
+        )
+    return "\n".join(cmds)
+
+
+def deploy_job_resources(
+    artifact: artifacts.Artifact,
+    jobs: List[xm.Job],
+    version: Optional[str] = None,
+) -> str:
+    version = version or datetime.datetime.now().strftime("%Y%m%d.%H%M%S")
+
+    executable = jobs[0].executable
+    executor = jobs[0].executor
+
+    assert isinstance(executor, executors.Local)
+    assert isinstance(executable, executables.Command)
+    job_script.validate_same_job_configuration(jobs)
+
+    job_name = f"job-{version}"
+
+    job_script_dir = artifact.job_path(job_name)
+
+    setup = _get_setup_cmds(executable, executor)
+    header = _create_job_header(executor, jobs, job_script_dir, job_name)
+
+    return common.create_array_job(
+        artifact=artifact,
+        executable=executable,
+        singularity_image=executable.singularity_image,
+        singularity_options=executor.singularity_options,
+        jobs=jobs,
+        use_gpu=_is_gpu_requested(executor),
+        version=version,
+        job_script_shebang=_JOB_SCRIPT_SHEBANG,
+        task_offset=_TASK_OFFSET,
+        task_id_var_name=_TASK_ID_VAR_NAME,
+        setup=setup,
+        header=header,
+    )
 
 
 class LocalExecutionHandle:
@@ -46,12 +116,10 @@ async def launch(config: config_lib.Config, jobs: List[xm.Job]):
         return []
 
     local_config = config.local_config()
-    storage_root = os.path.abspath(
-        os.path.expanduser(local_config["storage"]["staging"])
+    artifact = artifacts.LocalArtifact(
+        local_config["storage"]["staging"], project=config.project()
     )
-
-    artifact = artifacts.LocalArtifact(storage_root, project=config.project())
-    job_script_path = gridengine.deploy_job_resources(artifact, jobs)
+    job_script_path = deploy_job_resources(artifact, jobs)
 
     console.print(f"Launching {len(jobs)} jobs locally...")
     handles = []
@@ -59,7 +127,8 @@ async def launch(config: config_lib.Config, jobs: List[xm.Job]):
 
         def task(i):
             subprocess.run(
-                ["bash", job_script_path], env={**os.environ, "SGE_TASK_ID": str(i + 1)}
+                ["bash", job_script_path],
+                env={**os.environ, _TASK_ID_VAR_NAME: str(i + _TASK_OFFSET)},
             )
 
         future = local_executor().submit(task, i)

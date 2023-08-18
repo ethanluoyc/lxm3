@@ -1,4 +1,3 @@
-# type: ignore # TODO: remove this
 import asyncio
 import contextlib
 import functools
@@ -64,18 +63,18 @@ async def _launch(jobs: List[xm.Job]):
     local_handles = []
     if local_jobs:
         local_handles.extend(
-            await local_execution.launch(experiment._config, local_jobs)
+            await local_execution.launch(experiment._config, local_jobs)  # type: ignore
         )
 
     non_local_handles = []
     if gridengine_jobs:
         non_local_handles.extend(
-            await gridengine_execution.launch(experiment._config, gridengine_jobs)
+            await gridengine_execution.launch(experiment._config, gridengine_jobs)  # type: ignore
         )
 
     if slurm_jobs:
         non_local_handles.extend(
-            await slurm_execution.launch(experiment._config, slurm_jobs)
+            await slurm_execution.launch(experiment._config, slurm_jobs)  # type: ignore
         )
 
     return _LaunchResult(local_handles, non_local_handles)
@@ -115,14 +114,14 @@ class ClusterWorkUnit(xm.WorkUnit):
         del identity
 
         async with self._work_unit_id_predictor.submit_id(self._work_unit_id):  # type: ignore
-            await self._submit_job_for_execution(job_group.jobs, args)
+            await self._submit_job_for_execution(job_group, args)
 
         # This is used by batched experiment to wait for all jobs to be launched.
         # before initiating a batch context
         self._launch_event.set()
 
-    async def _submit_job_for_execution(self, jobs: xm.JobGroup, args):
-        jobs = list(jobs.values())
+    async def _submit_job_for_execution(self, job_group: xm.JobGroup, args):
+        jobs: List[xm.Job] = list(job_group.jobs.values())  # type: ignore
         assert len(jobs) == 1
         if self.experiment.is_in_batch():
 
@@ -318,9 +317,8 @@ def _load_vcsinfo() -> Optional[vcsinfo.VCS]:
 
 
 def create_experiment(
-    experiment_title: str,
-    config: Optional[config_lib.Config] = None,
-):
+    experiment_title: str, config: Optional[config_lib.Config] = None
+) -> ClusterExperiment:
     config = config or config_lib.default()
     vcs = _load_vcsinfo()
 

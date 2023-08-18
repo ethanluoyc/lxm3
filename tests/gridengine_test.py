@@ -95,22 +95,6 @@ class GridEngineTest(parameterized.TestCase):
         infos = gridengine.parse_qstat(xml_output)
         self.assertEqual(infos, expected)
 
-    # @parameterized.named_parameters(
-    #     [
-    #         {
-    #             "testcase_name": "qstat_detailed",
-    #             "input": "qstats_details.xml",
-    #             "expected": {"9830166": {"state": "pending"}},
-    #         },
-    #     ]
-    # )
-    # def test_parse_qstat_state_detailed(self, input, expected):
-    #     xml_output = pathlib.Path(
-    #         os.path.join(os.path.dirname(__file__), "testdata", input)
-    #     ).read_text()
-    #     infos = gridengine.parse_detailed_qstat(xml_output)
-    #     self.assertEqual(infos, expected)
-
 
 class AccountingTest(absltest.TestCase):
     def test_accounting(self):

@@ -4,7 +4,7 @@ import shlex
 import subprocess
 import threading
 import xml.etree.ElementTree as ET
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 import paramiko
 
@@ -64,35 +64,6 @@ def parse_qstat(qstat_xml_output: str):
     return infos
 
 
-def parse_detailed_qstat(qstat_xml_output: str):
-    root = ET.fromstring(qstat_xml_output)
-    infos = {}
-    for joblist in root.iter("job_list"):
-        job_number_elem = joblist.find("JB_job_number")
-        if job_number_elem is None:
-            raise ValueError()
-        job_id = job_number_elem.text
-        task_ids = joblist.find("tasks")
-        if task_ids is not None:
-            task_ids = task_ids.text
-            if ":" in task_ids:  # type: ignore
-                task_range, task_step = task_ids.split(":")  # type: ignore
-                task_step = int(task_step)
-                task_start, task_end = map(int, task_range.split("-"))
-                for tid in range(task_start, task_end + 1, task_step):
-                    infos[f"{job_id}.{tid}"] = {"state": joblist.attrib["state"]}
-            elif "," in task_ids:  # type: ignore
-                task_ids = map(int, task_ids.split(","))  # type: ignore
-                for tid in task_ids:
-                    infos[f"{job_id}.{tid}"] = {"state": joblist.attrib["state"]}
-            else:
-                tid = int(task_ids)  # type: ignore
-                infos[f"{job_id}.{tid}"] = {"state": joblist.attrib["state"]}
-        else:
-            infos[job_id] = {"state": joblist.attrib["state"]}
-    return infos
-
-
 _KEYS = (
     "qname,hostname,group,owner,project,"
     "department,jobname,jobnumber,taskid,"
@@ -104,7 +75,7 @@ _KEYS = (
 ).split(",")
 
 
-def parse_accounting(data):
+def parse_accounting(data: str) -> List[Dict[str, str]]:
     records = []
     record = {}
     for i, line in enumerate(data.split("\n")):
