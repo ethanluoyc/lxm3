@@ -24,10 +24,15 @@ from lxm3.xm_cluster import packaging
 from lxm3.xm_cluster.console import console
 from lxm3.xm_cluster.execution import gridengine as gridengine_execution
 from lxm3.xm_cluster.execution import local as local_execution
+from lxm3.xm_cluster.execution import slurm as slurm_execution
 
 
 def _gridengine_job_predicate(job: xm.Job):
     return isinstance(job.executor, executors.GridEngine)
+
+
+def _slurm_job_predicate(job: xm.Job):
+    return isinstance(job.executor, executors.Slurm)
 
 
 def _local_job_predicate(job: xm.Job):
@@ -43,11 +48,17 @@ class _LaunchResult:
 async def _launch(jobs: List[xm.Job]):
     experiment: ClusterExperiment = core._current_experiment.get()  # type: ignore
     gridengine_jobs = list(filter(_gridengine_job_predicate, jobs))
+    slurm_jobs = list(filter(_slurm_job_predicate, jobs))
     local_jobs = list(filter(_local_job_predicate, jobs))
-    if not (len(gridengine_jobs) == len(jobs) or len(local_jobs) == len(jobs)):
+
+    if not (
+        len(gridengine_jobs) == len(jobs)
+        or len(local_jobs) == len(jobs)
+        or len(slurm_jobs) == len(jobs)
+    ):
         raise ValueError(
             "ClusterExperiment only supports running only GridEngine XOR "
-            "Local executors at the same time."
+            "Local XOR Slurm executors at the same time."
         )
 
     local_handles = []
@@ -59,8 +70,14 @@ async def _launch(jobs: List[xm.Job]):
     non_local_handles = []
     if gridengine_jobs:
         non_local_handles.extend(
-            await gridengine_execution.launch(experiment._config, jobs)
+            await gridengine_execution.launch(experiment._config, gridengine_jobs)
         )
+
+    if slurm_jobs:
+        non_local_handles.extend(
+            await slurm_execution.launch(experiment._config, slurm_jobs)
+        )
+
     return _LaunchResult(local_handles, non_local_handles)
 
 

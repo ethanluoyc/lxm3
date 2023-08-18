@@ -4,33 +4,16 @@ from absl import flags
 
 from lxm3 import xm
 from lxm3 import xm_cluster
-from lxm3.contrib import ucl
 
-_LAUNCH_ON_CLUSTER = flags.DEFINE_boolean(
-    "launch_on_cluster", False, "Launch on cluster"
-)
-_GPU = flags.DEFINE_boolean("gpu", False, "If set, use GPU")
 _SINGULARITY_CONTAINER = flags.DEFINE_string(
     "container", "jax-cuda.sif", "Path to singularity container"
 )
+_BATCH = flags.DEFINE_bool("batch", False, "If set, launch array job example")
 
 
 def main(_):
     with xm_cluster.create_experiment(experiment_title="basic") as experiment:
-        if _GPU.value:
-            job_requirements = xm_cluster.JobRequirements(gpu=1, ram=8 * xm.GB)
-        else:
-            job_requirements = xm_cluster.JobRequirements(ram=8 * xm.GB)
-        if _LAUNCH_ON_CLUSTER.value:
-            # This is a special case for using SGE in UCL where we use generic
-            # job requirements and translate to SGE specific requirements.
-            # Non-UCL users, use `xm_cluster.GridEngine directly`.
-            executor = ucl.UclGridEngine(
-                job_requirements,
-                walltime=10 * xm.Min,
-            )
-        else:
-            executor = xm_cluster.Local(job_requirements)
+        executor: xm_cluster.Slurm = xm_cluster.Slurm(walltime=10 * xm.Min)
 
         spec = xm_cluster.PythonPackage(
             # This is a relative path to the launcher that contains
@@ -61,19 +44,36 @@ def main(_):
             [xm.Packageable(spec, executor_spec=executor.Spec())]
         )
 
-        experiment.add(
-            xm.Job(
-                executable=executable,
-                executor=executor,
-                # You can pass additional arguments to your executable with args
-                # This will be translated to `--seed 1`
-                # Note for booleans we currently use the absl.flags convention
-                # so {'gpu': False} will be translated to `--nogpu`
-                args={"seed": 1},
-                # You can customize environment_variables as well.
-                env_vars={"XLA_PYTHON_CLIENT_PREALLOCATE": "false"},
+        if not _BATCH.value:
+            experiment.add(
+                xm.Job(
+                    executable=executable,
+                    executor=executor,
+                    # You can pass additional arguments to your executable with args
+                    # This will be translated to `--seed 1`
+                    # Note for booleans we currently use the absl.flags convention
+                    # so {'gpu': False} will be translated to `--nogpu`
+                    args={"seed": 1},
+                    # You can customize environment_variables as well.
+                    env_vars={"XLA_PYTHON_CLIENT_PREALLOCATE": "false"},
+                )
             )
-        )
+        else:
+            with experiment.batch():
+                for _ in range(2):
+                    experiment.add(
+                        xm.Job(
+                            executable=executable,
+                            executor=executor,
+                            # You can pass additional arguments to your executable with args
+                            # This will be translated to `--seed 1`
+                            # Note for booleans we currently use the absl.flags convention
+                            # so {'gpu': False} will be translated to `--nogpu`
+                            args={"seed": 1},
+                            # You can customize environment_variables as well.
+                            env_vars={"XLA_PYTHON_CLIENT_PREALLOCATE": "false"},
+                        )
+                    )
 
 
 if __name__ == "__main__":

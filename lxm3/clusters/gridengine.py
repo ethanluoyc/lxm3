@@ -142,7 +142,7 @@ class Client:
         self._ssh.connect(hostname=hostname, username=username)
 
     def close(self):
-        if self._ssh is None:
+        if self._ssh is not None:
             with self._lock:
                 self._ssh.close()  # type: ignore
                 if self._qacct_ssh is not None and self._qacct_ssh is not self._ssh:
