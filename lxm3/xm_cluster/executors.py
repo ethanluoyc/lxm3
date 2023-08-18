@@ -84,3 +84,30 @@ class GridEngine(xm.Executor):
     singularity_options: Optional[SingularityOptions] = None
 
     Spec = GridEngineSpec  # type: ignore
+
+
+@attr.s(auto_attribs=True)
+class SlurmSpec(xm.ExecutorSpec):
+    """Spec for Slurm execution."""
+
+
+@attr.s(auto_attribs=True)
+class Slurm(xm.Executor):
+    """Slurm executor."""
+
+    requirements: JobRequirements = attr.Factory(JobRequirements)
+    resources: Dict[str, Any] = attr.Factory(dict)
+    walltime: Optional[Union[int, str]] = None
+
+    singularity_options: Optional[SingularityOptions] = None
+
+    log_directory: Optional[str] = None
+    # Modules to load before running the job
+    modules: Sequence[str] = attr.Factory(list)
+
+    exclusive: bool = False
+
+    extra_directives: Sequence[str] = attr.Factory(list)
+    skip_directives: Sequence[str] = attr.Factory(list)
+
+    Spec = SlurmSpec  # type: ignore
