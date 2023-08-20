@@ -1,3 +1,6 @@
+from unittest import mock
+
+import fabric
 from absl.testing import absltest
 from absl.testing import parameterized
 
@@ -17,6 +20,20 @@ class SlurmTest(parameterized.TestCase):
     def test_parse_job_id(self, text, expected):
         job_id = slurm.parse_job_id(text)
         self.assertEqual(job_id, expected)
+
+
+class ClientTest(absltest.TestCase):
+    @mock.patch("fabric.Connection")
+    def test_client(self, mock_connection):
+        instance = mock_connection.return_value
+        instance.run.return_value = fabric.Result(
+            connection=instance,
+            stdout="Submitted batch job 6",
+        )
+        client = slurm.Client(hostname="host", username="user")
+        job_id = client.launch("job.sbatch")
+        self.assertEqual(job_id, 6)
+        client.close()
 
 
 if __name__ == "__main__":

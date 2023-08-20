@@ -1,6 +1,6 @@
 import os
+import unittest.mock
 
-import pytest
 from absl.testing import absltest
 from absl.testing import parameterized
 
@@ -10,8 +10,8 @@ from lxm3.xm_cluster import packaging
 
 
 class PackagingTest(parameterized.TestCase):
-    @pytest.mark.slow
-    def test_package_python(self):
+    @unittest.mock.patch("subprocess.run")
+    def test_package_python(self, mock_run):
         spec = xm_cluster.PythonPackage(
             entrypoint=xm_cluster.ModuleName("py_package.main"),
             path=os.path.join(os.path.dirname(__file__), "testdata/test_pkg"),

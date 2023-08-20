@@ -25,6 +25,7 @@ dependencies = [
   "ml_collections",
   "tomlkit",
   "paramiko",
+  "fabric",
   "appdirs",
   "fsspec",
   "async_generator",
@@ -38,7 +39,6 @@ lxm3 = "lxm3.cli.cli:entrypoint"
 
 [project.optional-dependencies]
 shell = [
-  "fabric",
   "IPython"
 ]
 
@@ -135,7 +135,12 @@ ban-relative-imports = "all"
 source = ["lxm3", "*/lxm3/lxm3"]
 
 [tool.coverage.run]
-omit = ["lxm3/_vendor/*", "tests/*", "conftest.py"]
+omit = [
+  "lxm3/_vendor/*",
+  "tests/*",
+  "conftest.py",
+  "lxm3/xm_cluster/execution/utils.py" # not used
+]
 
 [tool.coverage.report]
 exclude_lines = [

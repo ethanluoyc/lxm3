@@ -1,4 +1,3 @@
-import logging
 import re
 import shlex
 import subprocess
@@ -6,9 +5,7 @@ import threading
 import xml.etree.ElementTree as ET
 from typing import Dict, List, Optional
 
-import paramiko
-
-logging.getLogger("paramiko.transport").setLevel(logging.WARNING)
+import fabric
 
 
 def parse_job_id(output: str) -> re.Match:
@@ -95,123 +92,81 @@ def parse_accounting(data: str) -> List[Dict[str, str]]:
 
 
 class Client:
+    _connection: Optional[fabric.Connection]
+
     def __init__(
         self, hostname: Optional[str] = None, username: Optional[str] = None
     ) -> None:
         self._hostname = hostname
         self._username = username
-        self._ssh = None
+        self._connection = None
+        self._mutex = threading.Lock()
         if hostname is not None:
-            self._connect(hostname, username)
-        self._qacct_ssh = None
-
-    def _connect(self, hostname: str, username: Optional[str] = None):
-        self._ssh = paramiko.SSHClient()
-        self._ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy)
-        self._ssh.load_system_host_keys()
-        self._lock = threading.Lock()
-        self._ssh.connect(hostname=hostname, username=username)
+            self._connection = fabric.Connection(host=hostname, user=username)
+        self._qacct_conn = None
 
     def close(self):
-        if self._ssh is not None:
-            with self._lock:
-                self._ssh.close()  # type: ignore
-                if self._qacct_ssh is not None and self._qacct_ssh is not self._ssh:
-                    self._qacct_ssh.close()
+        with self._mutex:
+            if self._connection is not None:
+                self._connection.close()
+            if self._qacct_conn is not None:
+                self._qacct_conn.close()
+
+    def _run_command(self, command: str) -> str:
+        if self._connection is None:
+            return subprocess.check_output(shlex.split(command), text=True)
+        else:
+            with self._mutex:
+                result = self._connection.run(command, hide="both")
+                return result.stdout
 
     def launch(self, command):
-        output = self._submit_command(command)
+        output = self._run_command(f"qsub {command}")
         match = parse_job_id(output)
         return match
 
-    def _run_command(self, command: str) -> str:
-        if self._ssh is None:
-            return subprocess.check_output(shlex.split(command), text=True)
-        else:
-            with self._lock:
-                _, stdout_, stderr_ = self._ssh.exec_command(command)  # type: ignore
-                retcode = stdout_.channel.recv_exit_status()
-                stderr = stderr_.read().decode()
-                stdout = stdout_.read().decode()
-                if retcode != 0:
-                    raise RuntimeError(
-                        f"Failed to run command: {command}\n"
-                        f"stdout:{stdout}\n"
-                        f"stderr:{stderr}"
-                    )
-                return stdout
-
-    def _submit_command(self, command: str) -> str:
-        return self._run_command(f"qsub {command}")
-
-    def _stat_command(self) -> str:
-        output = self._run_command("qstat -xml")
-        return output
-
-    def acct_command(self, job_id: Optional[str] = None):
-        if not job_id:
-            job_id = ""
-        return f"qacct -j {job_id} -u {self._username}"
-
     def qstat(self):
-        stats = parse_qstat(self._stat_command())
+        stats = parse_qstat(self._run_command("qstat -xml"))
         return stats
 
+    def cancel(self, job_id: str) -> None:
+        self._run_command(f"qdel {job_id}")
+
     def qacct(self, job_id: Optional[str] = None):
-        if self._qacct_ssh is None:
-            if self._ssh is None:
+        if self._qacct_conn is None:
+            if self._connection is None:
                 raise NotImplementedError("qacct with local session not implemented")
-            sftp = self._ssh.open_sftp()
+            sftp = self._connection.sftp()
             default_accounting_path = self._run_command(
                 "echo $SGE_ROOT/$SGE_CELL/common/accounting"
             ).strip()
             try:
                 sftp.stat(default_accounting_path)
             except IOError:
-                qacct_ssh_client = paramiko.SSHClient()
-                qacct_ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
                 act_qmaster_address = self._run_command(
                     "cat $SGE_ROOT/$SGE_CELL/common/act_qmaster"
                 ).strip()
-                gateway = self._ssh
-                sock = gateway.get_transport().open_channel(  # type: ignore
-                    "direct-tcpip", (act_qmaster_address, 22), ("", 0)
+                qacct_conn = fabric.Connection(
+                    act_qmaster_address, user=self._username, gateway=self._connection
                 )
-                qacct_ssh_client.connect(
-                    act_qmaster_address, username=self._username, sock=sock
-                )
-                self._qacct_ssh = qacct_ssh_client
+                self._qacct_conn = qacct_conn
             else:
-                self._qacct_ssh = self._ssh
-            finally:
-                sftp.close()
+                self._qacct_conn = self._connection
 
-        with self._lock:
-            _, stdout_, stderr_ = self._qacct_ssh.exec_command(self.acct_command(job_id))  # type: ignore
-            retcode = stdout_.channel.recv_exit_status()
-            stderr = stderr_.read().decode()
-            stdout = stdout_.read().decode()
-            if retcode != 0:
-                if "not found" in stderr:
-                    return []
-                else:
-                    raise RuntimeError(stderr)
-            return parse_accounting(stdout)
-
-    def _cancel_command(self, job_id: str) -> str:
-        return self._run_command(f"qdel {job_id}")
-
-    def cancel(self, job_id: str) -> None:
-        self._cancel_command(job_id)
+        with self._mutex:
+            if not job_id:
+                job_id = ""
+            command = f"qacct -j {job_id} -u {self._username}"
+            output = self._qacct_conn.run(command, hide="both").stdout
+            return parse_accounting(output)
 
     def shell(self):
-        import fabric
-
-        conn = fabric.Connection(self._hostname, user=self._username)
-        conn.shell()
+        if self._connection is None:
+            raise NotImplementedError("shell with local session not implemented")
+        self._connection.shell()
 
     def __repr__(self):
-        if self._ssh is not None:
+        if self._connection is not None:
             return f'Client(hostname="{self._hostname}", user="{self._username}")'
         else:
             return "Client()"

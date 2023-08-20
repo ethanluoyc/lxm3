@@ -1,6 +1,8 @@
 import os
 import pathlib
+from unittest import mock
 
+import fabric
 from absl.testing import absltest
 from absl.testing import parameterized
 
@@ -106,6 +108,20 @@ class AccountingTest(absltest.TestCase):
         )
         self.assertLen(gridengine.parse_accounting(DATA1), 2)
         self.assertLen(gridengine.parse_accounting(DATA2), 2)
+
+
+class ClientTest(absltest.TestCase):
+    @mock.patch("fabric.Connection")
+    def test_client(self, mock_connection):
+        instance = mock_connection.return_value
+        instance.run.return_value = fabric.Result(
+            connection=instance,
+            stdout='Your job 9830196 ("MyTESTJOBNAME") has been submitted',
+        )
+        client = gridengine.Client(hostname="host", username="user")
+        match = client.launch("job.qsub")
+        self.assertEqual(match.group(0), "9830196")
+        client.close()
 
 
 if __name__ == "__main__":
