@@ -6,7 +6,7 @@
 
 lxm3 provides an implementation for DeepMind's [XManager](https://github.com/deepmind/xmanager/tree/main) launch API that aims to provide a similar experience for running experiments on traditional HPC.
 
-Currently, lxm3 provides a local execution backend and support for the [SGE](https://en.wikipedia.org/wiki/Oracle_Grid_Engine) scheduler. The code should be extensible enough to support [Slurm](https://slurm.schedmd.com/). _If you would like to use lxm3 with Slurm or other schedulers, please get in touch (See https://github.com/ethanluoyc/lxm3/issues/2)._
+Currently, lxm3 provides a local execution backend and support for the [SGE](https://en.wikipedia.org/wiki/Oracle_Grid_Engine) and [Slurm](https://slurm.schedmd.com/) schedulers.
 
 __NOTE__: lxm3 is still in early development. The API is not stable and may change in the future. We periodically update tag versions which are considered in good shape.
 If you use lxm3 in your project, please pin to a specific commit/tag to avoid
