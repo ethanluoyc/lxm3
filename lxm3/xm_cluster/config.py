@@ -1,6 +1,7 @@
 import functools
 import os
 from collections import UserDict
+from typing import Any, Dict, Optional
 
 import appdirs
 import tomlkit
@@ -23,22 +24,22 @@ class Config(UserDict):
         config_dict = tomlkit.loads(content)
         return cls(config_dict)
 
-    def project(self):
+    def project(self) -> Optional[str]:
         project = os.environ.get("LXM_PROJECT", None)
         if project is not None:
             return project
         return self.data.get("project", None)
 
-    def local_config(self):
+    def local_config(self) -> Dict[str, Any]:
         return self.data["local"]
 
-    def default_cluster(self):
+    def default_cluster(self) -> str:
         cluster = os.environ.get("LXM_CLUSTER", None)
         if cluster is None:
             cluster = self.data["clusters"][0]["name"]
         return cluster
 
-    def cluster_config(self, location=None):
+    def cluster_config(self, location: Optional[str] = None) -> Dict[str, Any]:
         location = location or self.default_cluster()
         clusters = {cluster["name"]: cluster for cluster in self.data["clusters"]}
         if location not in clusters:

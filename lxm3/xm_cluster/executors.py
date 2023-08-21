@@ -106,6 +106,7 @@ class Slurm(xm.Executor):
     modules: Sequence[str] = attr.Factory(list)
 
     exclusive: bool = False
+    partition: Optional[str] = None
 
     extra_directives: Sequence[str] = attr.Factory(list)
     skip_directives: Sequence[str] = attr.Factory(list)

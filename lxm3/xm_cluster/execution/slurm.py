@@ -52,6 +52,9 @@ def _generate_header_from_executor(
     if executor.exclusive:
         header.append("#SBATCH --exclusive")
 
+    if executor.partition:
+        header.append(f"#SBATCH --partition={executor.partition}")
+
     if num_array_tasks is not None:
         array_spec = f"1-{num_array_tasks}"
         header.append(f"#SBATCH --array={array_spec}")

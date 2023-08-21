@@ -153,6 +153,7 @@ class ExecutionTest(parameterized.TestCase):
             resources={"mem": "1G"},
             walltime="1:00:00",
             exclusive=True,
+            partition="contrib-gpu-long",
         )
         header = slurm._generate_header_from_executor(
             "test_job", executor, None, "/logs"
@@ -160,6 +161,7 @@ class ExecutionTest(parameterized.TestCase):
         self.assertIn("#SBATCH --mem=1G", header)
         self.assertIn("#SBATCH --time=1:00:00", header)
         self.assertIn("#SBATCH --exclusive", header)
+        self.assertIn("#SBATCH --partition=contrib-gpu-long", header)
 
         executor = executors.Slurm()
         header = slurm._generate_header_from_executor("test_job", executor, 10, "/logs")
