@@ -130,13 +130,13 @@ class ExecutionTest(parameterized.TestCase):
             parallel_environments={"gpu": 1},
             project="test",
             account="alloc",
-            walltime="1:00:00",
+            walltime=10 * xm.Min,
         )
         header = gridengine._generate_header_from_executor(
             "test_job", executor, None, "/logs"
         )
         self.assertIn("#$ -l h_vmem=1G", header)
-        self.assertIn("#$ -l h_rt=1:00:00", header)
+        self.assertIn("#$ -l h_rt=00:10:00", header)
         self.assertIn("#$ -pe gpu 1", header)
         self.assertIn("#$ -P test", header)
         self.assertIn("#$ -A alloc", header)
@@ -151,7 +151,7 @@ class ExecutionTest(parameterized.TestCase):
     def test_slurm_header(self):
         executor = executors.Slurm(
             resources={"mem": "1G"},
-            walltime="1:00:00",
+            walltime=10 * xm.Hr,
             exclusive=True,
             partition="contrib-gpu-long",
         )
@@ -159,7 +159,7 @@ class ExecutionTest(parameterized.TestCase):
             "test_job", executor, None, "/logs"
         )
         self.assertIn("#SBATCH --mem=1G", header)
-        self.assertIn("#SBATCH --time=1:00:00", header)
+        self.assertIn("#SBATCH --time=10:00:00", header)
         self.assertIn("#SBATCH --exclusive", header)
         self.assertIn("#SBATCH --partition=contrib-gpu-long", header)
 

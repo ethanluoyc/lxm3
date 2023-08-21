@@ -18,6 +18,19 @@ _JOB_SCRIPT_SHEBANG = "#!/usr/bin/bash -l"
 _TASK_ID_VAR_NAME = "SLURM_ARRAY_TASK_ID"
 
 
+def _format_slurm_time(duration: datetime.timedelta) -> str:
+    # See
+    # https://github.com/SchedMD/slurm/blob/master/src/common/parse_time.c#L786
+    days = duration.days
+    seconds = int(duration.seconds)
+    hours, remainder = divmod(seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    if days > 0:
+        return "{:02}-{:02}:{:02}:{:02}".format(duration.days, hours, minutes, seconds)
+    else:
+        return "{:02}:{:02}:{:02}".format(hours, minutes, seconds)
+
+
 def _generate_header_from_executor(
     job_name: str,
     executor: executors.Slurm,
@@ -34,12 +47,9 @@ def _generate_header_from_executor(
         if value:
             header.append(f"#SBATCH --{resource}={value}")
 
-    if executor.walltime:
-        if not isinstance(executor.walltime, str):
-            duration = datetime.timedelta(seconds=executor.walltime)
-        else:
-            duration = executor.walltime
-        header.append(f"#SBATCH --time={duration}")
+    if executor.walltime is not None:
+        duration = executor.walltime
+        header.append(f"#SBATCH --time={_format_slurm_time(duration)}")
 
     log_directory = executor.log_directory or os.path.join(job_script_dir, "logs")
     if num_array_tasks is not None:

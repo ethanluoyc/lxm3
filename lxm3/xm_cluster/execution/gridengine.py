@@ -1,4 +1,3 @@
-import datetime
 import os
 from typing import List, Optional
 
@@ -18,6 +17,12 @@ from lxm3.xm_cluster.execution import job_script
 _TASK_OFFSET = 1
 _JOB_SCRIPT_SHEBANG = "#!/usr/bin/env bash"
 _TASK_ID_VAR_NAME = "SGE_TASK_ID"
+
+
+def _format_time(duration_seconds: int) -> str:
+    hours, remainder = divmod(duration_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    return "{:02}:{:02}:{:02}".format(int(hours), int(minutes), int(seconds))
 
 
 def _generate_header_from_executor(
@@ -44,12 +49,9 @@ def _generate_header_from_executor(
         if value > 0:
             header.append(f"#$ -pe {pe_name} {value}")
 
-    if executor.walltime:
-        if not isinstance(executor.walltime, str):
-            duration = datetime.timedelta(seconds=executor.walltime)
-        else:
-            duration = executor.walltime
-        header.append(f"#$ -l h_rt={duration}")
+    if executor.walltime is not None:
+        duration_secs = int(executor.walltime.total_seconds())
+        header.append(f"#$ -l h_rt={_format_time(duration_secs)}")
 
     if executor.queue:
         header.append(f"#$ -q {executor.queue}")

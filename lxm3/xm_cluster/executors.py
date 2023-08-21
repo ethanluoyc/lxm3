@@ -1,9 +1,25 @@
+import datetime
 from typing import Any, Dict, Optional, Sequence, Union
 
 import attr
 
 from lxm3 import xm
 from lxm3.xm_cluster.requirements import JobRequirements
+
+
+def _convert_time(
+    time: Optional[Union[str, datetime.datetime, int]]
+) -> Optional[datetime.timedelta]:
+    if time is None:
+        return None
+    if isinstance(time, int):
+        return datetime.timedelta(seconds=time)
+    elif isinstance(time, datetime.timedelta):
+        return time
+    else:
+        raise TypeError(
+            f"Expect walltime to be type int (seconds) or datetime.timedelta, got {type(time)}"
+        )
 
 
 @attr.s(auto_attribs=True)
@@ -56,7 +72,9 @@ class GridEngine(xm.Executor):
     # Parallel environments in the form of --pe <name> <slots>
     parallel_environments: Dict[str, int] = attr.Factory(dict)
     # Maximum running time, -l h_rt
-    walltime: Optional[Union[int, str]] = None
+    walltime: Optional[datetime.timedelta] = attr.field(
+        default=None, converter=_convert_time
+    )
 
     # queue to submit the job to: -q
     queue: Optional[str] = None
@@ -97,7 +115,9 @@ class Slurm(xm.Executor):
 
     requirements: JobRequirements = attr.Factory(JobRequirements)
     resources: Dict[str, Any] = attr.Factory(dict)
-    walltime: Optional[Union[int, str]] = None
+    walltime: Optional[datetime.timedelta] = attr.field(
+        default=None, converter=_convert_time
+    )
 
     singularity_options: Optional[SingularityOptions] = None
 
