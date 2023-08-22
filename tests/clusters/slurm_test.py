@@ -21,6 +21,10 @@ class SlurmTest(parameterized.TestCase):
         job_id = slurm.parse_job_id(text)
         self.assertEqual(job_id, expected)
 
+    def test_parse_invalid_job_id(self):
+        with self.assertRaises(ValueError):
+            slurm.parse_job_id("Failed")
+
 
 class ClientTest(absltest.TestCase):
     @mock.patch("fabric.Connection")
