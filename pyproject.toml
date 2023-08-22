@@ -163,3 +163,14 @@ reportMissingTypeStubs = false
 
 pythonVersion = "3.9"
 pythonPlatform = "Linux"
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+testpaths = [
+  "tests",
+  "lxm3/_vendor",
+]
+filterwarnings = [
+  # xm/core_test.py
+  "ignore:cannot collect test class 'TestError':pytest.PytestCollectionWarning",
+]
