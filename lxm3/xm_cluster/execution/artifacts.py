@@ -77,14 +77,15 @@ class Artifact(abc.ABC):
         self._fs.makedirs(os.path.dirname(dst), exist_ok=True)
         self._fs.put(local_filename, dst)
 
-    def deploy_job_scripts(self, job_name, job_script, array_wrapper):
+    def deploy_job_scripts(self, job_name, job_script, array_wrapper=None):
         job_path = self.job_path(job_name)
         job_log_path = os.path.join(job_path, "logs")
 
         self._fs.makedirs(job_path, exist_ok=True)
         self._fs.makedirs(job_log_path, exist_ok=True)
         self._put_content(self.job_script_path(job_name), job_script)
-        self._put_content(self.job_array_wrapper_path(job_name), array_wrapper)
+        if array_wrapper is not None:
+            self._put_content(self.job_array_wrapper_path(job_name), array_wrapper)
         console.log(f"Created job script {self.job_script_path(job_name)}")
 
     def deploy_singularity_container(self, singularity_image):

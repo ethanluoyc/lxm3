@@ -196,7 +196,6 @@ class ExecutionTest(parameterized.TestCase):
         expected_paths = [
             f"containers/{container_name}",
             f"jobs/job-{version}/job.sh",
-            f"jobs/job-{version}/array_wrapper.sh",
             f"archives/{archive_name}",
         ]
         for path in expected_paths:

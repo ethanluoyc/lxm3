@@ -126,39 +126,12 @@ def create_array_wrapper_script(
 def create_job_script(
     cmd: str,
     header: str,
-    archives: Optional[List[str]] = None,
     setup: str = "",
     shebang="#!/usr/bin/bash -l",
 ) -> str:
-    if archives is None:
-        archives = []
     return """\
 %(shebang)s
 %(header)s
-
-set -e
-
-_prepare_workdir() {
-    WORKDIR=$(mktemp -t -d -u lxm-workdir.XXXXX)
-    echo >&2 "INFO[$(basename $0)]: Prepare work directory: $WORKDIR"
-    mkdir -p $WORKDIR
-
-    _cleanup() {
-        echo >&2 "INFO[$(basename $0)]: Clean up work directory: $WORKDIR"
-        rm -rf $WORKDIR
-    }
-    trap _cleanup EXIT
-
-    # Extract archives
-    ARCHIVES="%(archives)s"
-    for ar in $ARCHIVES; do
-        unzip -q -d $WORKDIR $ar
-    done
-
-}
-
-_prepare_workdir
-cd $WORKDIR
 
 %(setup)s
 %(cmd)s
@@ -167,7 +140,6 @@ cd $WORKDIR
         "cmd": cmd2str(cmd),
         "shebang": shebang,
         "setup": setup,
-        "archives": " ".join(archives),
         "header": header,
     }
 

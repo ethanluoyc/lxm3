@@ -28,21 +28,52 @@ def create_array_job(
     version = version or datetime.datetime.now().strftime("%Y%m%d.%H%M%S")
 
     job_name = f"job-{version}"
+    array_wrapper = _create_array_wrapper(executable, jobs, task_offset)
+    deploy_archive_path = artifact.archive_path(executable.resource_uri)
+    setup_cmds = """
+set -e
 
-    job_script_dir = artifact.job_path(job_name)
+_prepare_workdir() {
+    WORKDIR=$(mktemp -t -d -u lxm-workdir.XXXXX)
+    echo >&2 "INFO[$(basename $0)]: Prepare work directory: $WORKDIR"
+    mkdir -p $WORKDIR
 
-    deploy_array_wrapper_path = os.path.join(
-        job_script_dir, job_script.ARRAY_WRAPPER_NAME
-    )
+    # Extract archives
+    ARCHIVES="%(archives)s"
+    for ar in $ARCHIVES; do
+        unzip -q -d $WORKDIR $ar
+    done
+
+    ARRAY_WRAPPER_PATH=$(mktemp -t -u lxm-array-wrapper.XXXXX)
+    echo >&2 "DEBUG[$(basename $0)]: Create wrapper script: $ARRAY_WRAPPER_PATH"
+    cat << 'EOF' > $ARRAY_WRAPPER_PATH
+%(array_wrapper)s
+EOF
+    chmod +x $ARRAY_WRAPPER_PATH
+
+    _cleanup() {
+        echo >&2 "INFO[$(basename $0)]: Clean up work directory: $WORKDIR"
+        rm -rf $WORKDIR
+        rm -f $ARRAY_WRAPPER_PATH
+    }
+
+    trap _cleanup EXIT
+
+}
+
+_prepare_workdir
+cd $WORKDIR
+%(setup)s
+""" % {
+        "array_wrapper": array_wrapper,
+        "archives": " ".join([deploy_archive_path]),
+        "setup": setup,
+    }
     # Always use the array wrapper for but hardcode task id if not launching one job.
     if len(jobs) > 1:
-        job_command = " ".join(
-            ["sh", os.fspath(deploy_array_wrapper_path), f"${task_id_var_name}"]
-        )
+        job_command = " ".join(["sh", "$ARRAY_WRAPPER_PATH", f"${task_id_var_name}"])
     else:
-        job_command = " ".join(
-            ["sh", os.fspath(deploy_array_wrapper_path), f"{task_offset}"]
-        )
+        job_command = " ".join(["sh", "$ARRAY_WRAPPER_PATH", f"{task_offset}"])
 
     if singularity_image is not None:
         deploy_container_path = artifact.singularity_image_path(
@@ -56,13 +87,10 @@ def create_array_job(
             use_gpu,
         )
 
-    array_wrapper = _create_array_wrapper(executable, jobs, task_offset)
-    deploy_archive_path = artifact.archive_path(executable.resource_uri)
     job_script_content = job_script.create_job_script(
         job_command,
         header,
-        archives=[deploy_archive_path],
-        setup=setup,
+        setup=setup_cmds,
         shebang=job_script_shebang,
     )
 
@@ -72,7 +100,6 @@ def create_array_job(
         singularity_image=singularity_image,
         job_name=job_name,
         job_script_content=job_script_content,
-        array_wrapper=array_wrapper,
     )
 
 
@@ -83,7 +110,6 @@ def _put_job_resources(
     singularity_image: Optional[str],
     job_name: str,
     job_script_content: str,
-    array_wrapper: str,
 ) -> str:
     # Put artifacts on the staging fs
     job_script_dir = artifact.job_path(job_name)
@@ -92,7 +118,7 @@ def _put_job_resources(
     if singularity_image is not None:
         artifact.deploy_singularity_container(singularity_image)
 
-    artifact.deploy_job_scripts(job_name, job_script_content, array_wrapper)
+    artifact.deploy_job_scripts(job_name, job_script_content)
 
     deploy_job_script_path = os.path.join(job_script_dir, job_script.JOB_SCRIPT_NAME)
 
