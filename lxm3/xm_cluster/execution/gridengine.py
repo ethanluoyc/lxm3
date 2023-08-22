@@ -1,3 +1,4 @@
+import datetime
 import os
 from typing import List, Optional
 
@@ -162,6 +163,7 @@ def deploy_job_resources(
     jobs: List[xm.Job],
     version: Optional[str] = None,
 ) -> str:
+    version = version or datetime.datetime.now().strftime("%Y%m%d.%H%M%S")
     executable = jobs[0].executable
     executor = jobs[0].executor
 
