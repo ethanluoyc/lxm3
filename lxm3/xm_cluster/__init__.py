@@ -7,6 +7,7 @@ from lxm3.xm_cluster.executable_specs import SingularityContainer
 from lxm3.xm_cluster.executables import Command
 from lxm3.xm_cluster.executors import GridEngine
 from lxm3.xm_cluster.executors import Local
+from lxm3.xm_cluster.executors import SingularityOptions
 from lxm3.xm_cluster.executors import Slurm
 from lxm3.xm_cluster.experiment import ClusterExperiment
 from lxm3.xm_cluster.experiment import create_experiment
