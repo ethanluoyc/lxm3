@@ -211,9 +211,16 @@ async def launch(
     if len(jobs) < 1:
         return []
 
-    storage_root, hostname, user = common.get_cluster_settings(config, jobs)
+    storage_root, hostname, user, connect_kwargs = common.get_cluster_settings(
+        config, jobs
+    )
+
     artifact = artifacts.create_artifact_store(
-        storage_root, hostname=hostname, user=user, project=config.project()
+        storage_root,
+        hostname=hostname,
+        user=user,
+        project=config.project(),
+        connect_kwargs=connect_kwargs,
     )
 
     client = gridengine.Client(hostname, user)

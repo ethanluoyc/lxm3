@@ -1,7 +1,7 @@
 import abc
 import datetime
 import os
-from typing import Optional
+from typing import Any, Mapping, Optional
 
 import fsspec
 import rich.progress
@@ -147,8 +147,11 @@ class RemoteArtifact(Artifact):
         user: Optional[str],
         staging_directory: str,
         project: Optional[str] = None,
+        connect_kwargs: Optional[Mapping[str, Any]] = None,
     ):
-        fs = fsspec.filesystem("sftp", host=hostname, username=user)
+        if connect_kwargs is None:
+            connect_kwargs = {}
+        fs = fsspec.filesystem("sftp", host=hostname, username=user, **connect_kwargs)
         # Normalize the storage root to an absolute path.
         self._host = hostname
         self._user = user
@@ -198,8 +201,15 @@ def create_artifact_store(
     hostname: Optional[str] = None,
     user: Optional[str] = None,
     project: Optional[str] = None,
+    connect_kwargs=None,
 ):
     if hostname is None:
         return LocalArtifact(storage_root, project=project)
     else:
-        return RemoteArtifact(hostname, user, storage_root, project=project)
+        return RemoteArtifact(
+            hostname,
+            user,
+            storage_root,
+            project=project,
+            connect_kwargs=connect_kwargs,
+        )

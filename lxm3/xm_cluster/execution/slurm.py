@@ -112,7 +112,7 @@ def _get_setup_cmds(
         cmds.append(
             "echo >&2 INFO[$(basename $0)]: CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
         )
-        cmds.append("nvidia-smi")
+        # cmds.append("nvidia-smi")
 
     if executable.singularity_image is not None:
         cmds.append(
@@ -178,10 +178,16 @@ async def launch(config: config_lib.Config, jobs: List[xm.Job]) -> List[SlurmHan
             "Only GridEngine executors are supported by the gridengine backend."
         )
 
-    storage_root, hostname, user = common.get_cluster_settings(config, jobs)
+    storage_root, hostname, user, connect_kwargs = common.get_cluster_settings(
+        config, jobs
+    )
 
     artifact = artifacts.create_artifact_store(
-        storage_root, hostname=hostname, user=user, project=config.project()
+        storage_root,
+        hostname=hostname,
+        user=user,
+        project=config.project(),
+        connect_kwargs=connect_kwargs,
     )
 
     job_script_path = deploy_job_resources(artifact, jobs)

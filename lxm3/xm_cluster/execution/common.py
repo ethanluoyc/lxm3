@@ -2,6 +2,8 @@ import datetime
 import os
 from typing import List, Optional, Union, cast
 
+import paramiko
+
 from lxm3 import xm
 from lxm3.xm_cluster import config as config_lib
 from lxm3.xm_cluster import executables
@@ -166,7 +168,13 @@ def get_cluster_settings(config: config_lib.Config, jobs: List[xm.Job]):
     storage_root = cluster_config["storage"]["staging"]
     hostname = cluster_config.get("server", None)
     user = cluster_config.get("user", None)
-    return storage_root, hostname, user
+
+    connect_kwargs = {}
+    proxycommand = cluster_config.get("proxycommand", None)
+    if proxycommand is not None:
+        connect_kwargs["sock"] = paramiko.ProxyCommand(proxycommand)
+
+    return storage_root, hostname, user, connect_kwargs
 
 
 def write_job_id(artifact, job_script_path: str, job_id: str):

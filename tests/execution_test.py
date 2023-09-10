@@ -27,6 +27,7 @@ staging = ".lxm"
 name = "cs"
 server = "beaker.cs.ucl.ac.uk"
 user = "foo"
+proxycommand = "ssh test"
 
 [clusters.storage]
 staging = "/home/foo/lxm3-staging"
@@ -85,12 +86,13 @@ class ExecutionTest(parameterized.TestCase):
             resource_uri="test",
             singularity_image="test",
         )
-        storage_root, hostname, user = common.get_cluster_settings(
+        storage_root, hostname, user, connect_kwargs = common.get_cluster_settings(
             _TEST_CONFIG, [xm.Job(executable, executors.GridEngine())]
         )
         self.assertEqual(storage_root, "/home/foo/lxm3-staging")
         self.assertEqual(hostname, "beaker.cs.ucl.ac.uk")
         self.assertEqual(user, "foo")
+        self.assertIn("sock", connect_kwargs)
 
         with self.assertRaises(ValueError):
             jobs = [xm.Job(executable, executors.Local())]
