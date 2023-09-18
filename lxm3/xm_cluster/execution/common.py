@@ -174,6 +174,14 @@ def get_cluster_settings(config: config_lib.Config, jobs: List[xm.Job]):
     if proxycommand is not None:
         connect_kwargs["sock"] = paramiko.ProxyCommand(proxycommand)
 
+    ssh_private_key = cluster_config.get("ssh_private_key", None)
+    if ssh_private_key is not None:
+        connect_kwargs["key_filename"] = os.path.expanduser(ssh_private_key)
+
+    password = cluster_config.get("password", None)
+    if password is not None:
+        connect_kwargs["password"] = password
+
     return storage_root, hostname, user, connect_kwargs
 
 
