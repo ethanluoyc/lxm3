@@ -178,6 +178,10 @@ def get_cluster_settings(config: config_lib.Config, jobs: List[xm.Job]):
     if ssh_private_key is not None:
         connect_kwargs["key_filename"] = os.path.expanduser(ssh_private_key)
 
+    password = cluster_config.get("password", None)
+    if password is not None:
+        connect_kwargs["password"] = password
+
     return storage_root, hostname, user, connect_kwargs
 
 
