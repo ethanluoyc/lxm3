@@ -116,6 +116,13 @@ name = "<TODO>"
 server = "<TODO>"
 # Fill in the username you use for this cluster.
 user = "<TODO>"
+# Uncomment and update the line below if you would like to use a private key file ssh.
+# ssh_private_key = "~/.ssh/<private key name>"
+# Uncomment and update the line below if you would like to use a password for ssh.
+# password = "<password>"
+# Uncomment and update the line below if you need to connect to the cluster
+# via a jump server. This corresponds to the proxycommand option in ssh_config.
+# proxycommand = ""
 
 [clusters.storage]
 # Replace with the path to a staging directory on the cluster. lxm3 uses this directory for storing all files required to run your job.
