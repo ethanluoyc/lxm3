@@ -1,9 +1,10 @@
+import itertools
 import re
 import shlex
 import subprocess
 import threading
 import xml.etree.ElementTree as ET
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 import fabric
 
@@ -89,6 +90,30 @@ def parse_accounting(data: str) -> List[Dict[str, str]]:
     if record:
         records.append(record)
     return records
+
+
+def merge_taskids(task_ids: List[Union[int, str]]) -> List[str]:
+    """Merge a list of task ids into list of ranges.
+
+    This is useful for summarizing a list of (failed) task ids
+    obtained via `qacct` to re-submit failed tasks.
+
+    Examples:
+    >>> merge_taskids([1, 2, 4, 5, 7])
+    ['1-2', '4-5', '7']
+
+    """
+    ids = sorted([int(f) for f in task_ids])
+    groups = itertools.groupby(
+        ids, key=lambda item, c=itertools.count(): item - next(c)
+    )
+    tasks_str = []
+    for range_ in [list(g) for k, g in groups]:
+        if len(range_) == 1:
+            tasks_str.append(str(range_[0]))
+        else:
+            tasks_str.append(f"{range_[0]}-{range_[-1]}")
+    return tasks_str
 
 
 class Client:
