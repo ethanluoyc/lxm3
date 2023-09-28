@@ -101,6 +101,16 @@ class GridEngineTest(parameterized.TestCase):
         infos = gridengine.parse_qstat(xml_output)
         self.assertEqual(infos, expected)
 
+    @parameterized.parameters(
+        ([12, 13, 14, 16], ["12-14", "16"]),
+        (reversed([12, 13, 14, 16]), ["12-14", "16"]),
+        ([1, 3, 14, 15, 16], ["1", "3", "14-16"]),
+        (["1", " 3", 14, 15, 16], ["1", "3", "14-16"]),
+    )
+    def test_merge_taskids(self, input, expected):
+        actual = gridengine.merge_taskids(input)
+        self.assertEqual(actual, expected)
+
 
 class AccountingTest(absltest.TestCase):
     def test_accounting(self):
