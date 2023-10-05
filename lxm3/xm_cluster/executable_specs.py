@@ -54,6 +54,7 @@ class PythonPackage(job_blocks.ExecutableSpec):
     entrypoint: Union[CommandList, ModuleName]
     path: str = attr.ib(converter=utils.resolve_path_relative_to_launcher, default=".")
     resources: List[Fileset] = attr.ib(converter=list, default=attr.Factory(list))
+    extra_packages: List[str] = attr.ib(converter=list, default=attr.Factory(list))
 
     @property
     def name(self) -> str:

@@ -55,6 +55,7 @@ def _create_archive(
                         "-t",
                         tmpdir,
                         package_dir,
+                        *py_package.extra_packages,
                     ],
                     text=True,
                     check=True,
