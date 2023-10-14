@@ -8,14 +8,14 @@ description = 'LXM3: XManager launch backend for HPC clusters'
 readme = "README.md"
 requires-python = ">=3.9"
 license = "MIT"
-keywords = []
+keywords = ["machine-learning", "hpc", "packaging", "singularity"]
 authors = [{ name = "Yicheng Luo", email = "ethanluoyc@gmail.com" }]
 classifiers = [
   "Development Status :: 4 - Beta",
   "Programming Language :: Python",
+  "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
-  "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: Implementation :: CPython",
 ]
 dynamic = ["version"]
@@ -34,6 +34,11 @@ dependencies = [
   "rich",
   "vcsinfo",
 ]
+
+[project.urls]
+homepage = "https://github.com/ethanluoyc/lxm3"
+documentation = "https://lxm3.readthedocs.io/en/latest/"
+repository = "https://github.com/ethanluoyc/lxm3"
 
 [project.scripts]
 lxm3 = "lxm3.cli.cli:entrypoint"
