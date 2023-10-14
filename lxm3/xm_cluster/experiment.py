@@ -319,6 +319,12 @@ def _load_vcsinfo() -> Optional[vcsinfo.VCS]:
 def create_experiment(
     experiment_title: str, config: Optional[config_lib.Config] = None
 ) -> ClusterExperiment:
+    """Create a LXM3 experiment backed by the xm_cluster backend.
+    Args:
+        experiment_title: Title of the experiment.
+        config: Optional config object to use. If set, override
+            the configuration loaded from the config file.
+    """
     config = config or config_lib.default()
     vcs = _load_vcsinfo()
 

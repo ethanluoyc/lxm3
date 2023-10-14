@@ -19,17 +19,29 @@ class Fileset(executables.BinaryDependency):
     """Additional files to package."""
 
     def __init__(self, files=None):
-        # files is a mapping from local_path -> fileset path
+        """Create a Fileset.
+
+        Args:
+            files: A mapping from local_path -> fileset path.
+        """
         files = files or {}
         self._files = {}
         for src, dst in files.items():
             self.add_path(src, dst)
 
     def add_path(self, src: str, dst: str):
+        """Add a file to the fileset.
+
+        Args:
+            src: Path to the file on the local filesystem.
+            dst: Path to the file in the package.
+        """
         self._files[dst] = src
 
     def get_path(self, name: str, executor_spec: xm.ExecutableSpec):
+        """Resolve the path to a file in fileset."""
         del executor_spec
+        # Currently no-op
         return name
 
     @property
@@ -51,7 +63,56 @@ class CommandList(NamedTuple):
 
 @attr.s(auto_attribs=True)
 class PythonPackage(job_blocks.ExecutableSpec):
-    """Python package describes an executable that can be packaged by `pip install`."""
+    """Python package describes an executable that can be packaged by
+    ``pip install``.
+
+    :obj:`PythonPackage` describes a python distribution that can be
+    installed by ``pip install``. This is the recommended way to
+    package python projects. For an introduction to python packaging,
+    see
+    `Packaging Python Projects <https://packaging.python.org/en/latest/tutorials/packaging-projects/>`_.
+
+    Note:
+        lxm3 uses ``pip install`` to install the package into a temporary
+        directory that will be subsequently packaged into a zip archive
+        that will be deployed and unzipped when jobs run on the cluster.
+        However, this should be considered an implementation.
+
+        lxm3 uses ``pip install --no-deps`` to install the package. This
+        means that lxm3 **will not** install the dependencies required by
+        the project. Therefore, you should install your dependencies
+        first on the execution platform (or if you are using singularity,
+        install them in the container).
+
+    Attributes:
+        entrypoint: Entrypoint for the built executable.
+
+            Currently, only :obj:`ModuleName` and :obj:`CommandList`
+            are supported.
+
+            For :obj:`ModuleName`, this corresponds to running
+            ``python3 -m <module_name>``.
+
+            For :obj:`CommandList`, this corresponds to running a
+            shell script including the commands.
+
+        path: Path to the python project.
+            This should be the path to a directory ``path`` that can
+            be installed as a python package by ``pip install
+            <path>``. If it's a relative path, this will be resolved
+            relative to the launcher's working directory.
+
+        resources: List of resources to package. Currently, only
+            :obj:`Fileset` is supported.
+
+        extra_packages: List of paths to additional packages that will
+            be install by ``pip``.
+
+            :attr:`extra_packages` is useful if you also
+            want to include a dependency that you are also working on
+            locally and you want to use your development version which
+            are not installed in the runtime environment.
+    """
 
     entrypoint: Union[CommandList, ModuleName]
     path: str = attr.ib(converter=utils.resolve_path_relative_to_launcher, default=".")
@@ -87,6 +148,9 @@ class UniversalPackage(job_blocks.ExecutableSpec):
     Examples:
         See ``examples/universal_package`` for an example.
 
+    Raises:
+        ValueError: If the build script is not executable.
+
     """
 
     entrypoint: List[str]
@@ -109,7 +173,14 @@ class UniversalPackage(job_blocks.ExecutableSpec):
 
 @attr.s(auto_attribs=True)
 class SingularityContainer(job_blocks.ExecutableSpec):
-    """An executable that can be executed in a Singularity container."""
+    """An executable that can be executed in a Singularity container.
+
+    Attributes:
+        entrypoint: Another ExcutableSpec.
+        image_path: Path to a Singularity image.
+            If it's a relative path, this will be resolved relative
+            to the launcher's working directory.
+    """
 
     entrypoint: Union[UniversalPackage, PythonPackage]
     image_path: str = attr.ib(

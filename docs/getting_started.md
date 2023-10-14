@@ -15,11 +15,10 @@ You can also install from GitHub for the latest features.
 pip install git+https://github.com/ethanluoyc/lxm3
 ```
 
-## Understanding the XManager API
+## Examples
 Since lxm3 implements the XManager API, you should get familiar with
 the concepts in the [XManager](https://github.com/deepmind/xmanager).
 
-## Examples
-Once you are familiar with the concepts, checkout the
-[examples/](https://github.com/ethanluoyc/lxm3/tree/main/examples)
+Once you have understood the basics,
+checkout the [examples/](https://github.com/ethanluoyc/lxm3/tree/main/examples)
 directory for a quick start guide.

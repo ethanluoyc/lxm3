@@ -27,21 +27,18 @@ class SingularityOptions(xm.ExecutorSpec):
     """Options for singularity container.
 
     Args:
-        bind: Dict of the form {host_path: container_path}
+        bind: Mapping of the form ``{src: dst}``.
+        User-bind path specification of the form ``-B <src>:<dst>``.
         extra_options: Extra commandline options to pass to singularity.
-            See ``NOTE`` below.
 
-    Note:
-        When using the ``extra_options``, be aware of the following:
-            1. lxm3 currently probably won't likely work with --contain, --pwd and -wd,
-            2. You don't have to pass --nv for gpu jobs, lxm3 will do it for you.
+          When using the ``extra_options``, be aware of the following:
+            1. lxm3 currently probably won't likely work with
+               ``--contain``, ``--pwd`` and ``-wd``,
+            2. You don't have to pass ``--nv`` for GPU jobs,
+               lxm3 will do it for you.
     """
 
     bind: Optional[Dict[str, str]] = None
-    # Extra commandline options to pass to singularity
-    # NOTE:
-    # 1. lxm3 currently probably won't likely work with --contain, --pwd and -wd,
-    # 2. You don't have to pass --nv for gpu jobs, lxm3 will do it for you.
     extra_options: Sequence[str] = attr.Factory(list)
 
 
@@ -59,7 +56,6 @@ class Local(xm.Executor):
         singularity_options: Options for singularity container
     """
 
-    # Placeholder, no effect right now
     requirements: JobRequirements = attr.Factory(JobRequirements)
 
     singularity_options: Optional[SingularityOptions] = None
@@ -74,7 +70,30 @@ class GridEngineSpec(xm.ExecutorSpec):
 
 @attr.s(auto_attribs=True)
 class GridEngine(xm.Executor):
-    """SGE executor."""
+    """SGE executor.
+
+    Attributes:
+        requirements: placeholder, no effect right now.
+        resources: Resources passed to qsub as `-l key=value`.
+        parallel_environments: Parallel environments in the form of ``--pe <name> <slots>``.
+        walltime: Maximum running time, ``-l h_rt=time``.
+            When an ``int`` is used, this is interpreted as seconds.
+            A ``datetime.timedelta`` can also be used.
+        queue: queue to submit the job to: ``-q``.
+        reserved: If set, use ``-R y``.
+        log_directory: Log directory for stdout/stderr.
+        merge_output: If False, log to separate files.
+        shell: Shell to use, default ``/bin/bash``.
+        project: ``-P``.
+        account: ``-A``.
+        modules: Modules to load before running the job.
+            See https://modules.readthedocs.io/en/latest/
+        max_parallel_tasks: ``-tc``.
+        extra_directives: Extra directives to pass to ``qsub``.
+        skip_directives: Directives to skip.
+        singularity_options: Options for singularity container.
+
+    """
 
     # WARNING:
     # requirements are currently ignored as different SGE clusters

@@ -59,6 +59,8 @@ dependencies = [
   "pytest-cov",
   "pre-commit",
   "fabric",
+  "Sphinx",
+  "myst-parser"
 ]
 
 [tool.hatch.version]
@@ -77,6 +79,7 @@ cov = [
   "test-cov",
   "coverage report"
 ]
+docs = "sphinx-build -b html docs docs/build/html -j auto"
 
 [[tool.hatch.envs.all.matrix]]
 python = ["3.9", "3.10", "3.11"]
