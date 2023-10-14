@@ -1,8 +1,9 @@
 # LXM3: XManager launch backend for HPC clusters
+[![PyPI version](https://badge.fury.io/py/lxm3.svg)](https://badge.fury.io/py/lxm3)
+![PyPI - Python Version](https://img.shields.io/pypi/pyversions/lxm3)
 [![Hatch project](https://img.shields.io/badge/%F0%9F%A5%9A-Hatch-4051b5.svg)](https://github.com/pypa/hatch)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
-[![test](https://github.com/ethanluoyc/lxm3/actions/workflows/test.yml/badge.svg)](https://github.com/ethanluoyc/lxm3/actions/workflows/test.yml)
 
 lxm3 provides an implementation for DeepMind's [XManager](https://github.com/deepmind/xmanager/tree/main) launch API that aims to provide a similar experience for running experiments on traditional HPC.
 
@@ -17,7 +18,11 @@ For running on a cluster, you should install Singularity and rsync before using 
 It may be possible to run on the cluster without Singularity, but that path
 was not tested thoroughly.
 
-You can install lxm3 from this repository by running.
+You can install lxm3 from PyPI by running.
+```bash
+pip install lxm3
+```
+You can also install from GitHub for the latest features.
 ```bash
 # Consider pinning to a specific commit/tag.
 pip install git+https://github.com/ethanluoyc/lxm3
@@ -35,6 +40,7 @@ lxm3 provides the following executable specification and executors.
 | Name      | Description |
 | ----------- | ----------- |
 | `lxm3.xm_cluster.PythonPackage`      | A python application packageable with pip |
+| `lxm3.xm_cluster.UniversalPackage`      | A universal package |
 | `lxm3.xm_cluster.SingularityContainer` | An executable running with Singularity |
 
 ### Executors
@@ -42,6 +48,7 @@ lxm3 provides the following executable specification and executors.
 | ----------- | ----------- |
 | `lxm3.xm_cluster.Local`     | Runs a executable locally, mainly used for testing |
 | `lxm3.xm_cluster.GridEngine`     | Runs a executable on SGE cluster |
+| `lxm3.xm_cluster.Slurm`     | Runs a executable on Slurm cluster |
 
 ### Jobs
 * Currently, only `xm.Job` and `xm.JobGenerator` that generates `xm.Job` are supported.
@@ -99,6 +106,9 @@ In addition to the packaging, lxm3 also allows you to carry extra files for your
 The zip archive is automatically extracted into a temporary directory on the cluster and executed from there.
 Using a zip archive again minimizes the number of files that are deployed to the cluster so that you are
 less likely to hit a file number limit.
+
+If you are using a different language or you cannot package your python application easily
+with standard Python packaging tools, you can use `xm_cluster.UniversalPackage` to package your application.
 
 ### __Easy Hyperparameter Sweeping__.
 For many scientific research projects, it's common to run the same experiment with different hyperparameters. lxm3 automatically generates jobs scripts that can be submitted to the cluster's scheduler for running multiple experiments with different hyperparameters passed as differnt command line arguments or environment variables.
