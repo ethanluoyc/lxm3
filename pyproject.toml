@@ -60,7 +60,8 @@ dependencies = [
   "pre-commit",
   "fabric",
   "Sphinx",
-  "myst-parser"
+  "myst-parser",
+  "sphinx_nameko_theme"
 ]
 
 [tool.hatch.version]
