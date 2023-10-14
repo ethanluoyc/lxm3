@@ -1,0 +1,3 @@
+# For building documentation
+Sphinx
+myst-parser

@@ -24,9 +24,19 @@ def _convert_time(
 
 @attr.s(auto_attribs=True)
 class SingularityOptions(xm.ExecutorSpec):
-    """Options for singularity container."""
+    """Options for singularity container.
 
-    # Dict of the form {host_path: container_path}
+    Args:
+        bind: Dict of the form {host_path: container_path}
+        extra_options: Extra commandline options to pass to singularity.
+            See ``NOTE`` below.
+
+    Note:
+        When using the ``extra_options``, be aware of the following:
+            1. lxm3 currently probably won't likely work with --contain, --pwd and -wd,
+            2. You don't have to pass --nv for gpu jobs, lxm3 will do it for you.
+    """
+
     bind: Optional[Dict[str, str]] = None
     # Extra commandline options to pass to singularity
     # NOTE:
@@ -42,7 +52,12 @@ class LocalSpec(xm.ExecutorSpec):
 
 @attr.s(auto_attribs=True)
 class Local(xm.Executor):
-    """Local executor."""
+    """Local executor.
+
+    Args:
+        requirements: placeholder, no effect right now
+        singularity_options: Options for singularity container
+    """
 
     # Placeholder, no effect right now
     requirements: JobRequirements = attr.Factory(JobRequirements)

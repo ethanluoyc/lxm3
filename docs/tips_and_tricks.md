@@ -1,9 +1,10 @@
 # Tips and Tricks
 
-## Set up WandB logging for your project
+## 1. Set up WandB logging for your project
 
-You can use environment variables to automatically generate
-WandB logging for your project.
+You can configure environment variables per work unit to automatically
+generate log each job to a [Weights and Biases](https://wandb.ai/site)
+run with name and group.
 
 ```python
 def _get_wandb_env_vars(work_unit: xm.WorkUnit, experiment_name: str):
@@ -43,11 +44,13 @@ experiment.add(
 
 ```
 
-## Use ml_collections.ConfigDict for your hyperparameters
+## 2. Use `ml_collections` for your hyperparameters
 
-If you use `ml_collections.ConfigDict` to manage your hyperparameters,
-you can pass the config file to your job while allowing overriding specific
-configuration from the launcher like the following:
+If you use
+[`ml_collections.ConfigDict`](https://github.com/google/ml_collections/tree/master)
+to manage your hyperparameters, you can pass the config file to your
+job while allowing overriding specific configuration from the launcher
+like the following:
 ```python
 # Define a config flag in your launcher
 config_flags.DEFINE_config_file("config", None, "Path to config")

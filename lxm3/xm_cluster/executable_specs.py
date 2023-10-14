@@ -51,6 +51,8 @@ class CommandList(NamedTuple):
 
 @attr.s(auto_attribs=True)
 class PythonPackage(job_blocks.ExecutableSpec):
+    """Python package describes an executable that can be packaged by `pip install`."""
+
     entrypoint: Union[CommandList, ModuleName]
     path: str = attr.ib(converter=utils.resolve_path_relative_to_launcher, default=".")
     resources: List[Fileset] = attr.ib(converter=list, default=attr.Factory(list))
@@ -69,21 +71,21 @@ class UniversalPackage(job_blocks.ExecutableSpec):
     as it can be used for any language and build system not supported natived by LXM3.
     However, it requires more work to set up.
 
-    Attributes:
+    Args:
         entrypoint: Entrypoint for the built executable.
         build_script: Path to the build script. If it's a relative path, this will be
             resolved relative to `path`.
             The build script should be an executable that can be used to produce a
             directory containing files that will be packaged into a zip archive.
             During packaging. The build script put the files into the directory
-            specified by the `BUILDDIR` environment variable.
+            specified by the ``BUILDDIR`` environment variable.
         build_args: Additional arguments that will be passed to the build script.
             path: Path to the project.
         path: Path to the project. If it's a relative path, this will be resolved
             relative to the launcher's working directory.
 
     Examples:
-        See `examples/universal_package` for an example.
+        See ``examples/universal_package`` for an example.
 
     """
 
@@ -107,6 +109,8 @@ class UniversalPackage(job_blocks.ExecutableSpec):
 
 @attr.s(auto_attribs=True)
 class SingularityContainer(job_blocks.ExecutableSpec):
+    """An executable that can be executed in a Singularity container."""
+
     entrypoint: Union[UniversalPackage, PythonPackage]
     image_path: str = attr.ib(
         converter=utils.resolve_path_relative_to_launcher, default="."
