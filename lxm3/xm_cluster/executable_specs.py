@@ -62,8 +62,52 @@ class PythonPackage(job_blocks.ExecutableSpec):
 
 
 @attr.s(auto_attribs=True)
+class UniversalPackage(job_blocks.ExecutableSpec):
+    """Universal package describes a package that can be built by a custom build script.
+
+    Compared to `PythonPackage`, UniversalPackage is more flexible,
+    as it can be used for any language and build system not supported natived by LXM3.
+    However, it requires more work to set up.
+
+    Attributes:
+        entrypoint: Entrypoint for the built executable.
+        build_script: Path to the build script. If it's a relative path, this will be
+            resolved relative to `path`.
+            The build script should be an executable that can be used to produce a
+            directory containing files that will be packaged into a zip archive.
+            During packaging. The build script put the files into the directory
+            specified by the `BUILDDIR` environment variable.
+        build_args: Additional arguments that will be passed to the build script.
+            path: Path to the project.
+        path: Path to the project. If it's a relative path, this will be resolved
+            relative to the launcher's working directory.
+
+    Examples:
+        See `examples/universal_package` for an example.
+
+    """
+
+    entrypoint: List[str]
+    build_script: str
+    build_args: List[str] = attr.ib(converter=list, default=attr.Factory(list))
+    path: str = attr.ib(converter=utils.resolve_path_relative_to_launcher, default=".")
+
+    @property
+    def name(self) -> str:
+        return name_from_path(self.path)
+
+    def __attrs_post_init__(self):
+        self.build_script = os.path.join(self.path, self.build_script)
+        if not os.access(self.build_script, os.X_OK):
+            raise ValueError(
+                "Build script is not executable"
+                f"You may need to run `chmod +x {self.build_script}` to make it executable."
+            )
+
+
+@attr.s(auto_attribs=True)
 class SingularityContainer(job_blocks.ExecutableSpec):
-    entrypoint: PythonPackage
+    entrypoint: Union[UniversalPackage, PythonPackage]
     image_path: str = attr.ib(
         converter=utils.resolve_path_relative_to_launcher, default="."
     )

@@ -141,11 +141,47 @@ def _package_python_package(
     )
 
 
+def _package_universal_package(
+    universal_package: cluster_executable_specs.UniversalPackage,
+    packageable: xm.Packageable,
+):
+    staging = tempfile.mkdtemp(dir=_staging_directory())
+    version = datetime.datetime.now().strftime("%Y%m%d.%H%M%S")
+    archive_name = f"{universal_package.name}-{version}"
+
+    with tempfile.TemporaryDirectory(
+        prefix=f"build-{archive_name}",
+        dir=_staging_directory(),
+    ) as build_dir:
+        package_dir = universal_package.path
+        build_env = {**os.environ, "BUILDDIR": build_dir}
+
+        build_script = os.path.join(package_dir, universal_package.build_script)
+
+        subprocess.run(
+            [build_script] + universal_package.build_args,
+            cwd=package_dir,
+            env=build_env,
+            check=True,
+        )
+        archive_name = shutil.make_archive(
+            os.path.join(staging, archive_name), "zip", build_dir, verbose=True
+        )
+
+    return cluster_executables.Command(
+        entrypoint_command=" ".join(universal_package.entrypoint),
+        resource_uri=os.path.join(staging, os.path.basename(archive_name)),
+        name=universal_package.name,
+        args=packageable.args,
+        env_vars=packageable.env_vars,
+    )
+
+
 def _package_singularity_container(
     container: cluster_executable_specs.SingularityContainer,
     packageable: xm.Packageable,
 ):
-    executable = _package_python_package(container.entrypoint, packageable)
+    executable = _PACKAGING_ROUTER(container.entrypoint, packageable)
     executable.singularity_image = container.image_path
     return executable
 
@@ -162,6 +198,7 @@ def _throw_on_unknown_executable(
 
 _PACKAGING_ROUTER = pattern_matching.match(
     _package_python_package,
+    _package_universal_package,
     _package_singularity_container,
     _throw_on_unknown_executable,
 )
