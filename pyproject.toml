@@ -118,6 +118,7 @@ exclude = '''
   | third_party
   | _vendor
   | scratch
+  | .venv
 )/
 '''
 
@@ -128,7 +129,7 @@ select = [
   "F",   # pyflakes
   "I",
 ]
-exclude = ["_vendor", "xm"]
+exclude = ["_vendor", "xm", ".venv"]
 
 [tool.ruff.extend-per-file-ignores]
 "__init__.py" = ["F401"]
