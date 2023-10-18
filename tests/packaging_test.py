@@ -55,6 +55,20 @@ class PackagingTest(parameterized.TestCase):
                 build_script="build_not_executable.sh",
             )
 
+    def test_package_singularity_invalid_path(self):
+        py_package = xm_cluster.PythonPackage(
+            entrypoint=xm_cluster.ModuleName("py_package.main"),
+            path=os.path.join(_HERE, "testdata/test_pkg"),
+        )
+        fake_image_path = self.create_tempfile().full_path
+        # This is OK
+        xm_cluster.SingularityContainer(py_package, image_path=fake_image_path)
+        # Raises on non-existent path
+        with self.assertRaises(ValueError):
+            xm_cluster.SingularityContainer(
+                py_package, image_path=os.path.join(_HERE, "/fake/image.sif")
+            )
+
 
 if __name__ == "__main__":
     absltest.main()

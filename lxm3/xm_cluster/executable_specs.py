@@ -183,10 +183,20 @@ class SingularityContainer(job_blocks.ExecutableSpec):
     """
 
     entrypoint: Union[UniversalPackage, PythonPackage]
-    image_path: str = attr.ib(
-        converter=utils.resolve_path_relative_to_launcher, default="."
-    )
+    image_path: str
 
     @property
     def name(self) -> str:
         return self.entrypoint.name
+
+    def __attrs_post_init__(self):
+        image_path = self.image_path
+        if not os.path.isabs(self.image_path):
+            image_path = utils.resolve_path_relative_to_launcher(image_path)
+        if not os.path.exists(image_path):
+            raise ValueError(
+                f"Unable to find Singularity image at {image_path}"
+                "If you use a relative path, it should be relative to the "
+                "launcher's directory."
+            )
+        self.image_path = image_path
