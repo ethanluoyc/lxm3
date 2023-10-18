@@ -28,6 +28,16 @@ class PackagingTest(parameterized.TestCase):
         )
         self.assertIsInstance(executable, xm_cluster.Command)
 
+    def test_package_default_pip_args(self):
+        spec = xm_cluster.PythonPackage(
+            entrypoint=xm_cluster.ModuleName("py_package.main"),
+            path=os.path.join(_HERE, "testdata/test_pkg"),
+        )
+        self.assertEqual(
+            sorted(spec.pip_args),
+            sorted(["--no-deps", "--no-compile"]),
+        )
+
     def test_package_universal(self):
         spec = xm_cluster.UniversalPackage(
             entrypoint=["python3", "main.py"],

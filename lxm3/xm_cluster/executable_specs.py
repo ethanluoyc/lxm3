@@ -76,13 +76,20 @@ class PythonPackage(job_blocks.ExecutableSpec):
         lxm3 uses ``pip install`` to install the package into a temporary
         directory that will be subsequently packaged into a zip archive
         that will be deployed and unzipped when jobs run on the cluster.
-        However, this should be considered an implementation.
+        However, this should be considered an implementation detail.
 
-        lxm3 uses ``pip install --no-deps`` to install the package. This
-        means that lxm3 **will not** install the dependencies required by
-        the project. Therefore, you should install your dependencies
-        first on the execution platform (or if you are using singularity,
+        lxm3 uses ``pip install --no-deps`` by default to install the package.
+        This means that lxm3 **will not** install the dependencies required by
+        the project. The reason is that typical ML dependencies are
+        large. (e.g. TensorFlow is around 400MB)
+        Therefore, you should install your dependencies
+        first on the cluster (better, if you are using singularity,
         install them in the container).
+
+        The root directory of the deployed archive will be added to
+        PYTHONPATH, so you can import your package as usual. However,
+        if that interferes with package imports, please open an issue
+        and let us know.
 
     Attributes:
         entrypoint: Entrypoint for the built executable.
@@ -112,12 +119,18 @@ class PythonPackage(job_blocks.ExecutableSpec):
             want to include a dependency that you are also working on
             locally and you want to use your development version which
             are not installed in the runtime environment.
+
+        pip_args: Additional options that will be passed to ``pip install``.
+            Defaults to ``--no-deps --no-compile``.
     """
 
     entrypoint: Union[CommandList, ModuleName]
     path: str = attr.ib(converter=utils.resolve_path_relative_to_launcher, default=".")
     resources: List[Fileset] = attr.ib(converter=list, default=attr.Factory(list))
     extra_packages: List[str] = attr.ib(converter=list, default=attr.Factory(list))
+    pip_args: List[str] = attr.ib(
+        converter=list, default=attr.Factory(lambda: ["--no-deps", "--no-compile"])
+    )
 
     @property
     def name(self) -> str:

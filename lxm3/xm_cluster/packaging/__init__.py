@@ -50,8 +50,7 @@ def _create_archive(
                     [
                         "pip",
                         "install",
-                        "--no-deps",
-                        "--no-compile",
+                        *py_package.pip_args,
                         "-t",
                         tmpdir,
                         package_dir,
