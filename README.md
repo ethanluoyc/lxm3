@@ -30,9 +30,44 @@ pip install git+https://github.com/ethanluoyc/lxm3
 ```
 
 ## Documentation
-Since lxm3 implements the XManager API, you should get familiar with the concepts in the [XManager](https://github.com/deepmind/xmanager). Once you are familiar with the concepts, checkout the [examples/](examples/) directory for a quick start guide.
+At a high level you can launch experiment by creating a launch script
+called `launcher.py` that looks like:
 
-TODO: Add a simple example for usage.
+```python
+with xm_cluster.create_experiment(experiment_title="hello world") as experiment:
+    # Launch on a Slurm cluster
+    executor = xm_cluster.Slurm()
+    # or, if you want to use SGE:
+    # executor = xm_cluster.GridEngine()
+    # or, if you want to run locally:
+    # executor = xm_cluster.Local()
+
+    spec = xm_cluster.PythonPackage(
+       path=".",
+       entrypoint=xm_cluster.ModuleName("my_package.main"),
+    )
+
+    # package your code
+    [executable] = experiment.package(
+        [xm.Packageable(spec, executor_spec=executor.Spec())]
+    )
+
+    # add jobs to your experiment
+    experiment.add(
+        xm.Job(executable=executable, executor=executor)
+    )
+```
+and launch the experimet from the command line with
+```python
+lxm3 launch launcher.py
+```
+
+Many things happen under the hood. Since lxm3 implements the XManager
+API, you should get familiar with the concepts in the
+[XManager](https://github.com/deepmind/xmanager). Once you are
+familiar with the concepts, checkout the [examples/](examples/)
+directory for a quick start guide.
+
 
 ## Components
 lxm3 provides the following executable specification and executors.
