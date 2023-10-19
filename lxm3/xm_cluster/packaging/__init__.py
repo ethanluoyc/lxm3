@@ -19,6 +19,10 @@ from lxm3.xm_cluster.console import console
 _ENTRYPOINT = "./entrypoint.sh"
 
 
+class PackagingError(Exception):
+    """Error raised when packaging fails."""
+
+
 @functools.lru_cache()
 def _staging_directory():
     staging_dir = tempfile.mkdtemp(prefix="xm_cluster_staging_")
@@ -61,11 +65,9 @@ def _create_archive(
                     capture_output=True,
                 )
             except subprocess.CalledProcessError as e:
-                raise RuntimeError(
-                    "Failed to package python package: {}. stdout\n{}\nstderr{}".format(
-                        package_dir, e.stdout, e.stderr
-                    )
-                )
+                raise PackagingError(
+                    f"Failed to create python package from {package_dir}"
+                ) from e
 
             # Add resources to the archive
             for resource in resources:
@@ -157,17 +159,24 @@ def _package_universal_package(
 
         build_script = os.path.join(package_dir, universal_package.build_script)
 
-        subprocess.run(
-            [build_script] + universal_package.build_args,
-            cwd=package_dir,
-            env=build_env,
-            check=True,
-        )
+        try:
+            subprocess.run(
+                [build_script] + universal_package.build_args,
+                cwd=package_dir,
+                env=build_env,
+                check=True,
+            )
+        except subprocess.CalledProcessError as e:
+            raise PackagingError(
+                "Failed to build universal package from {}".format(package_dir)
+            ) from e
+
         archive_name = shutil.make_archive(
             os.path.join(staging, archive_name), "zip", build_dir, verbose=True
         )
 
     return cluster_executables.Command(
+        # TODO(yl): this is not very robust
         entrypoint_command=" ".join(universal_package.entrypoint),
         resource_uri=os.path.join(staging, os.path.basename(archive_name)),
         name=universal_package.name,
