@@ -4,6 +4,7 @@ from typing import List, Optional, Union, cast
 
 import paramiko
 
+from lxm3 import singularity
 from lxm3 import xm
 from lxm3.xm_cluster import config as config_lib
 from lxm3.xm_cluster import executables
@@ -78,9 +79,13 @@ cd $WORKDIR
         job_command = " ".join(["sh", "$ARRAY_WRAPPER_PATH", f"{task_offset}"])
 
     if singularity_image is not None:
-        deploy_container_path = artifact.singularity_image_path(
-            os.path.basename(singularity_image)
-        )
+        transport, _ = singularity.uri.split(singularity_image)
+        if not transport:
+            deploy_container_path = artifact.singularity_image_path(
+                os.path.basename(singularity_image)
+            )
+        else:
+            deploy_container_path = singularity_image
         singularity_options = singularity_options
         job_command = _wrap_singularity_cmd(
             job_command,
@@ -118,7 +123,9 @@ def _put_job_resources(
     artifact.deploy_resource_archive(executable.resource_uri)
 
     if singularity_image is not None:
-        artifact.deploy_singularity_container(singularity_image)
+        transport, _ = singularity.uri.split(singularity_image)
+        if not transport:
+            artifact.deploy_singularity_container(singularity_image)
 
     artifact.deploy_job_scripts(job_name, job_script_content)
 

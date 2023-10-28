@@ -205,6 +205,34 @@ class ExecutionTest(parameterized.TestCase):
                 full_path = os.path.exists(os.path.join(deploy_dir, path))
                 self.assertTrue(full_path)
 
+    def test_no_container_deploy_for_docker(self):
+        """Not uploading container for image of the form docker://..."""
+        staging_dir = self.create_tempdir(name="staging")
+        executor = executors.GridEngine()
+        deploy_fn = gridengine.deploy_job_resources
+
+        archive_name = "archive.zip"
+        container_name = "docker://python:3.10-slim"
+        archive = staging_dir.create_file(archive_name)
+
+        deploy_dir = self.create_tempdir(name="deploy")
+        executable = cluster_executables.Command(
+            name="test",
+            entrypoint_command="echo hello",
+            resource_uri=archive.full_path,
+            singularity_image=container_name,
+        )
+        version = "1"
+
+        job = xm.Job(executable, executor, name="test")
+        artifact = artifacts.LocalArtifact(deploy_dir.full_path)
+
+        def deploy_raise(*args, **kwargs):
+            raise ValueError("Should not be called")
+
+        artifact.deploy_singularity_container = deploy_raise
+        deploy_fn(artifact=artifact, jobs=[job], version=version)
+
 
 if __name__ == "__main__":
     absltest.main()

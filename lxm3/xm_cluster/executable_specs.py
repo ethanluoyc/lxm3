@@ -4,6 +4,7 @@ from typing import List, NamedTuple, Union
 
 import attr
 
+from lxm3 import singularity
 from lxm3 import xm
 from lxm3.xm import executables
 from lxm3.xm import job_blocks
@@ -204,6 +205,9 @@ class SingularityContainer(job_blocks.ExecutableSpec):
 
     def __attrs_post_init__(self):
         image_path = self.image_path
+        transport, _ = singularity.uri.split(image_path)
+        if transport:
+            return
         if not os.path.isabs(self.image_path):
             image_path = utils.resolve_path_relative_to_launcher(image_path)
         if not os.path.exists(image_path):
