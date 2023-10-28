@@ -65,6 +65,9 @@ def _create_archive(
                     capture_output=True,
                 )
             except subprocess.CalledProcessError as e:
+                if e.stderr:
+                    console.log("Error during packaging, stderr:", style="bold red")
+                    console.log(e.stderr, style="bold red")
                 raise PackagingError(
                     f"Failed to create python package from {package_dir}"
                 ) from e
