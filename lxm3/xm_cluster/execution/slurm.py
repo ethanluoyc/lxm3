@@ -5,11 +5,11 @@ from typing import List, Optional
 
 from lxm3 import xm
 from lxm3.clusters import slurm
+from lxm3.xm_cluster import artifacts
 from lxm3.xm_cluster import config as config_lib
 from lxm3.xm_cluster import executables
 from lxm3.xm_cluster import executors
 from lxm3.xm_cluster.console import console
-from lxm3.xm_cluster.execution import artifacts
 from lxm3.xm_cluster.execution import common
 from lxm3.xm_cluster.execution import job_script
 
@@ -121,13 +121,7 @@ def _get_setup_cmds(
     return "\n".join(cmds)
 
 
-def deploy_job_resources(
-    artifact: artifacts.Artifact,
-    jobs: List[xm.Job],
-    version: Optional[str] = None,
-) -> str:
-    version = version or datetime.datetime.now().strftime("%Y%m%d.%H%M%S")
-
+def create_job_script(jobs: List[xm.Job], job_name, job_script_dir) -> str:
     executable = jobs[0].executable
     executor = jobs[0].executor
 
@@ -135,21 +129,15 @@ def deploy_job_resources(
     assert isinstance(executable, executables.Command)
     job_script.validate_same_job_configuration(jobs)
 
-    job_name = f"job-{version}"
-
-    job_script_dir = artifact.job_path(job_name)
-
     setup = _get_setup_cmds(executable, executor)
     header = _create_job_header(executor, jobs, job_script_dir, job_name)
 
     return common.create_array_job(
-        artifact=artifact,
         executable=executable,
         singularity_image=executable.singularity_image,
         singularity_options=executor.singularity_options,
         jobs=jobs,
         use_gpu=_is_gpu_requested(executor),
-        version=version,
         job_script_shebang=_JOB_SCRIPT_SHEBANG,
         task_offset=_TASK_OFFSET,
         task_id_var_name=_TASK_ID_VAR_NAME,
@@ -178,9 +166,12 @@ async def launch(config: config_lib.Config, jobs: List[xm.Job]) -> List[SlurmHan
             "Only GridEngine executors are supported by the gridengine backend."
         )
 
-    storage_root, hostname, user, connect_kwargs = common.get_cluster_settings(
-        config, jobs
-    )
+    (
+        storage_root,
+        hostname,
+        user,
+        connect_kwargs,
+    ) = config_lib.default().get_cluster_settings()
 
     artifact = artifacts.create_artifact_store(
         storage_root,
@@ -190,7 +181,13 @@ async def launch(config: config_lib.Config, jobs: List[xm.Job]) -> List[SlurmHan
         connect_kwargs=connect_kwargs,
     )
 
-    job_script_path = deploy_job_resources(artifact, jobs)
+    version = datetime.datetime.now().strftime("%Y%m%d.%H%M%S")
+    job_name = f"job-{version}"
+    job_script_dir = artifact.job_path(job_name)
+    job_script_content = create_job_script(jobs, job_name, job_script_dir)
+
+    artifact.deploy_job_scripts(job_name, job_script_content)
+    job_script_path = os.path.join(job_script_dir, job_script.JOB_SCRIPT_NAME)
 
     console.log(f"Launch with command:\n  sbatch {job_script_path}")
     client = slurm.Client(hostname=hostname, username=user)

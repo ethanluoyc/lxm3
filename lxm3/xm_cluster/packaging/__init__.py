@@ -10,10 +10,14 @@ from typing import Any, Sequence
 
 from absl import logging
 
+from lxm3 import singularity
 from lxm3 import xm
 from lxm3._vendor.xmanager.xm import pattern_matching
+from lxm3.xm_cluster import artifacts
+from lxm3.xm_cluster import config as config_lib
 from lxm3.xm_cluster import executable_specs as cluster_executable_specs
 from lxm3.xm_cluster import executables as cluster_executables
+from lxm3.xm_cluster import executors
 from lxm3.xm_cluster.console import console
 
 _ENTRYPOINT = "./entrypoint.sh"
@@ -97,7 +101,7 @@ def _create_archive(
 export PYTHONPATH=$(dirname $0):$PYTHONPATH
 {_create_entrypoint_cmds(py_package)}
 """
-            with open(os.path.join(tmpdir, _ENTRYPOINT), "w") as f:
+            with open(os.path.join(tmpdir, _ENTRYPOINT), "wt") as f:
                 f.write(entrypoint)
             os.chmod(f.name, 0o755)
             archive_name = shutil.make_archive(
@@ -130,15 +134,18 @@ def _create_entrypoint_cmds(python_package: cluster_executable_specs.PythonPacka
 def _package_python_package(
     py_package: cluster_executable_specs.PythonPackage,
     packageable: xm.Packageable,
+    artifact: artifacts.Artifact,
 ):
     staging = tempfile.mkdtemp(dir=_staging_directory())
     archive_name = _create_archive(staging, py_package)
     local_archive_path = os.path.join(staging, archive_name)
     entrypoint_cmd = _ENTRYPOINT
 
+    deployed_archive_path = artifact.deploy_resource_archive(local_archive_path)
+
     return cluster_executables.Command(
         entrypoint_command=entrypoint_cmd,
-        resource_uri=local_archive_path,
+        resource_uri=deployed_archive_path,
         name=py_package.name,
         args=packageable.args,
         env_vars=packageable.env_vars,
@@ -148,6 +155,7 @@ def _package_python_package(
 def _package_universal_package(
     universal_package: cluster_executable_specs.UniversalPackage,
     packageable: xm.Packageable,
+    artifact: artifacts.Artifact,
 ):
     staging = tempfile.mkdtemp(dir=_staging_directory())
     version = datetime.datetime.now().strftime("%Y%m%d.%H%M%S")
@@ -178,10 +186,13 @@ def _package_universal_package(
             os.path.join(staging, archive_name), "zip", build_dir, verbose=True
         )
 
+    local_archive_path = os.path.join(staging, os.path.basename(archive_name))
+    deployed_archive_path = artifact.deploy_resource_archive(local_archive_path)
+
     return cluster_executables.Command(
         # TODO(yl): this is not very robust
         entrypoint_command=" ".join(universal_package.entrypoint),
-        resource_uri=os.path.join(staging, os.path.basename(archive_name)),
+        resource_uri=deployed_archive_path,
         name=universal_package.name,
         args=packageable.args,
         env_vars=packageable.env_vars,
@@ -191,16 +202,30 @@ def _package_universal_package(
 def _package_singularity_container(
     container: cluster_executable_specs.SingularityContainer,
     packageable: xm.Packageable,
+    artifact: artifacts.Artifact,
 ):
-    executable = _PACKAGING_ROUTER(container.entrypoint, packageable)
-    executable.singularity_image = container.image_path
+    executable = _PACKAGING_ROUTER(container.entrypoint, packageable, artifact)
+
+    singularity_image = container.image_path
+    transport, _ = singularity.uri.split(singularity_image)
+    if not transport:
+        deploy_container_path = artifact.singularity_image_path(
+            os.path.basename(singularity_image)
+        )
+        artifact.deploy_singularity_container(singularity_image)
+    else:
+        deploy_container_path = singularity_image
+
+    executable.singularity_image = deploy_container_path
     return executable
 
 
 def _throw_on_unknown_executable(
     executable: Any,
     packageable: xm.Packageable,
+    artifact: artifacts.Artifact,
 ):
+    del artifact
     raise TypeError(
         f"Unsupported executable specification: {executable!r}. "
         f"Packageable: {packageable!r}"
@@ -215,5 +240,60 @@ _PACKAGING_ROUTER = pattern_matching.match(
 )
 
 
+def _executor_packaging_router(packageable: xm.Packageable):
+    def _package_for_local_executor(
+        packageable: xm.Packageable, executor_spec: executors.LocalSpec
+    ):
+        del executor_spec
+
+        config = config_lib.default()
+        local_config = config_lib.default().local_config()
+        artifact = artifacts.LocalArtifact(
+            local_config["storage"]["staging"], project=config.project()
+        )
+        return _PACKAGING_ROUTER(packageable.executable_spec, packageable, artifact)
+
+    def _package_for_gridengine_executor(
+        packageable: xm.Packageable,
+        executor_spec: executors.GridEngineSpec,
+    ):
+        del executor_spec
+        config = config_lib.default()
+        storage_root, hostname, user, connect_kwargs = config.get_cluster_settings()
+
+        artifact = artifacts.create_artifact_store(
+            storage_root,
+            hostname=hostname,
+            user=user,
+            project=config.project(),
+            connect_kwargs=connect_kwargs,
+        )
+
+        return _PACKAGING_ROUTER(packageable.executable_spec, packageable, artifact)
+
+    def _package_for_slurm_executor(
+        packageable: xm.Packageable, executor_spec: executors.SlurmSpec
+    ):
+        del executor_spec
+        config = config_lib.default()
+        storage_root, hostname, user, connect_kwargs = config.get_cluster_settings()
+
+        artifact = artifacts.create_artifact_store(
+            storage_root,
+            hostname=hostname,
+            user=user,
+            project=config.project(),
+            connect_kwargs=connect_kwargs,
+        )
+
+        return _PACKAGING_ROUTER(packageable.executable_spec, packageable, artifact)
+
+    return pattern_matching.match(
+        _package_for_local_executor,
+        _package_for_gridengine_executor,
+        _package_for_slurm_executor,
+    )(packageable, packageable.executor_spec)
+
+
 def package(packageables: Sequence[xm.Packageable]):
-    return [_PACKAGING_ROUTER(pkg.executable_spec, pkg) for pkg in packageables]
+    return [_executor_packaging_router(pkg) for pkg in packageables]

@@ -1,38 +1,27 @@
-import datetime
 import os
-from typing import List, Optional, Union, cast
+from typing import List, Optional
 
-import paramiko
-
-from lxm3 import singularity
 from lxm3 import xm
-from lxm3.xm_cluster import config as config_lib
 from lxm3.xm_cluster import executables
 from lxm3.xm_cluster import executors
-from lxm3.xm_cluster.execution import artifacts
 from lxm3.xm_cluster.execution import job_script
 
 
 def create_array_job(
     *,
-    artifact: artifacts.Artifact,
     executable: executables.Command,
     singularity_image: Optional[str],
     singularity_options: Optional[executors.SingularityOptions],
     jobs: List[xm.Job],
     use_gpu: bool,
-    version: Optional[str] = None,
     job_script_shebang: str,
     task_offset: int,
     task_id_var_name: str,
     setup: str,
     header: str,
 ):
-    version = version or datetime.datetime.now().strftime("%Y%m%d.%H%M%S")
-
-    job_name = f"job-{version}"
     array_wrapper = _create_array_wrapper(executable, jobs, task_offset)
-    deploy_archive_path = artifact.archive_path(executable.resource_uri)
+    deploy_archive_path = executable.resource_uri
     setup_cmds = """
 set -e
 
@@ -79,17 +68,9 @@ cd $WORKDIR
         job_command = " ".join(["sh", "$ARRAY_WRAPPER_PATH", f"{task_offset}"])
 
     if singularity_image is not None:
-        transport, _ = singularity.uri.split(singularity_image)
-        if not transport:
-            deploy_container_path = artifact.singularity_image_path(
-                os.path.basename(singularity_image)
-            )
-        else:
-            deploy_container_path = singularity_image
-        singularity_options = singularity_options
         job_command = _wrap_singularity_cmd(
             job_command,
-            deploy_container_path,
+            singularity_image,
             singularity_options,
             use_gpu,
         )
@@ -100,38 +81,7 @@ cd $WORKDIR
         setup=setup_cmds,
         shebang=job_script_shebang,
     )
-
-    return _put_job_resources(
-        artifact=artifact,
-        executable=executable,
-        singularity_image=singularity_image,
-        job_name=job_name,
-        job_script_content=job_script_content,
-    )
-
-
-def _put_job_resources(
-    *,
-    artifact: artifacts.Artifact,
-    executable: executables.Command,
-    singularity_image: Optional[str],
-    job_name: str,
-    job_script_content: str,
-) -> str:
-    # Put artifacts on the staging fs
-    job_script_dir = artifact.job_path(job_name)
-    artifact.deploy_resource_archive(executable.resource_uri)
-
-    if singularity_image is not None:
-        transport, _ = singularity.uri.split(singularity_image)
-        if not transport:
-            artifact.deploy_singularity_container(singularity_image)
-
-    artifact.deploy_job_scripts(job_name, job_script_content)
-
-    deploy_job_script_path = os.path.join(job_script_dir, job_script.JOB_SCRIPT_NAME)
-
-    return deploy_job_script_path
+    return job_script_content
 
 
 def _create_array_wrapper(
@@ -156,40 +106,6 @@ def _wrap_singularity_cmd(
         f"singularity exec {singularity_opts} {deploy_container_path} {job_command}"
     )
     return job_command
-
-
-def get_cluster_settings(config: config_lib.Config, jobs: List[xm.Job]):
-    executor = cast(Union[executors.Slurm, executors.GridEngine], jobs[0].executor)
-    location = executor.requirements.location
-
-    for job in jobs:
-        if not isinstance(job.executor, (executors.GridEngine, executors.Slurm)):
-            raise ValueError("Only GridEngine and Slurm executors are supported.")
-        if job.executor.requirements.location != location:
-            raise ValueError("All jobs must be launched on the same cluster.")
-
-    if location is None:
-        location = config.default_cluster()
-
-    cluster_config = config.cluster_config(location)
-    storage_root = cluster_config["storage"]["staging"]
-    hostname = cluster_config.get("server", None)
-    user = cluster_config.get("user", None)
-
-    connect_kwargs = {}
-    proxycommand = cluster_config.get("proxycommand", None)
-    if proxycommand is not None:
-        connect_kwargs["sock"] = paramiko.ProxyCommand(proxycommand)
-
-    ssh_private_key = cluster_config.get("ssh_private_key", None)
-    if ssh_private_key is not None:
-        connect_kwargs["key_filename"] = os.path.expanduser(ssh_private_key)
-
-    password = cluster_config.get("password", None)
-    if password is not None:
-        connect_kwargs["password"] = password
-
-    return storage_root, hostname, user, connect_kwargs
 
 
 def write_job_id(artifact, job_script_path: str, job_id: str):

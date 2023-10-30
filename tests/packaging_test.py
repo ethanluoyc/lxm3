@@ -2,11 +2,13 @@ import os
 import unittest.mock
 import zipfile
 
+import fsspec
 from absl.testing import absltest
 from absl.testing import parameterized
 
 from lxm3 import xm
 from lxm3 import xm_cluster
+from lxm3.xm_cluster import artifacts
 from lxm3.xm_cluster import packaging
 
 _HERE = os.path.abspath(os.path.dirname(__file__))
@@ -19,12 +21,14 @@ class PackagingTest(parameterized.TestCase):
             entrypoint=xm_cluster.ModuleName("py_package.main"),
             path=os.path.join(_HERE, "testdata/test_pkg"),
         )
+        artifact = artifacts.Artifact(fsspec.filesystem("memory"), "/tmp", "test")
         executable = packaging._package_python_package(
             spec,
             xm.Packageable(
                 spec,
                 xm_cluster.Local().Spec(),
             ),
+            artifact,
         )
         self.assertIsInstance(executable, xm_cluster.Command)
 
@@ -44,18 +48,22 @@ class PackagingTest(parameterized.TestCase):
             path=os.path.join(_HERE, "testdata/test_universal"),
             build_script="build.sh",
         )
+        artifact = artifacts.Artifact(fsspec.filesystem("memory"), "/", "test")
         executable = packaging._package_universal_package(
             spec,
             xm.Packageable(
                 spec,
                 xm_cluster.Local().Spec(),
             ),
+            artifact,
         )
         self.assertIsInstance(executable, xm_cluster.Command)
         # Check that archive exists
-        self.assertTrue(os.path.exists(executable.resource_uri))
-        archive = zipfile.ZipFile(executable.resource_uri)
-        self.assertEqual(set(archive.namelist()), set(["main.py"]))
+        self.assertTrue(artifact._fs.exists(executable.resource_uri))
+        # TODO(yl): Add this back
+        with artifact._fs.open(executable.resource_uri, "rb") as f:
+            archive = zipfile.ZipFile(f)  # type: ignore
+            self.assertEqual(set(archive.namelist()), set(["main.py"]))
 
     def test_package_universal_not_executable(self):
         with self.assertRaises(ValueError):

@@ -51,13 +51,6 @@ class ConfigTest(parameterized.TestCase):
         with unittest.mock.patch.dict("os.environ", {"LXM_CLUSTER": "myriad"}):
             self.assertEqual(config.default_cluster(), "myriad")
 
-    def test_cluster_config(self):
-        config = _test_config()
-        self.assertEqual(config.cluster_config()["name"], "cs")
-        self.assertEqual(config.cluster_config("myriad")["name"], "myriad")
-        with self.assertRaisesRegex(ValueError, "Unknown cluster"):
-            config.cluster_config("foo")
-
     def test_config_project(self):
         config = config_lib.Config()
         self.assertEqual(config.project(), None)

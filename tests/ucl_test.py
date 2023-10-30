@@ -40,8 +40,7 @@ class UCLClusterTest(parameterized.TestCase):
         ),
     )
     def test_cs_cluster(self, requirements, expected_resources, expected_pe):
-        requirements.location = "cs"
-        executor = ucl.UclGridEngine(requirements)
+        executor = ucl._cs_executor_fn(requirements)
         self.assertEqual(executor.resources, expected_resources)
         self.assertEqual(executor.parallel_environments, expected_pe)
 
@@ -78,15 +77,9 @@ class UCLClusterTest(parameterized.TestCase):
         ),
     )
     def test_myriad_cluster(self, requirements, expected_resources, expected_pe):
-        requirements.location = "myriad"
-        executor = ucl.UclGridEngine(requirements)
+        executor = ucl._myriad_executor_fn(requirements)
         self.assertEqual(executor.resources, expected_resources)
         self.assertEqual(executor.parallel_environments, expected_pe)
-
-    def test_invalid_location(self):
-        requirements = cluster_requirements.JobRequirements(location="unknown")
-        with self.assertRaises(ValueError):
-            ucl.UclGridEngine(requirements)
 
 
 if __name__ == "__main__":

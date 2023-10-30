@@ -39,13 +39,33 @@ class Config(UserDict):
             cluster = self.data["clusters"][0]["name"]
         return cluster
 
-    def cluster_config(self, location: Optional[str] = None) -> Dict[str, Any]:
-        location = location or self.default_cluster()
+    def get_cluster_settings(self):
+        location = self.default_cluster()
         clusters = {cluster["name"]: cluster for cluster in self.data["clusters"]}
         if location not in clusters:
             raise ValueError("Unknown cluster")
-        cluster = clusters[location]
-        return cluster
+        cluster_config = clusters[location]
+        storage_root = cluster_config["storage"]["staging"]
+        hostname = cluster_config.get("server", None)
+        user = cluster_config.get("user", None)
+
+        connect_kwargs = {}
+
+        proxycommand = cluster_config.get("proxycommand", None)
+        if proxycommand is not None:
+            import paramiko
+
+            connect_kwargs["sock"] = paramiko.ProxyCommand(proxycommand)
+
+        ssh_private_key = cluster_config.get("ssh_private_key", None)
+        if ssh_private_key is not None:
+            connect_kwargs["key_filename"] = os.path.expanduser(ssh_private_key)
+
+        password = cluster_config.get("password", None)
+        if password is not None:
+            connect_kwargs["password"] = password
+
+        return storage_root, hostname, user, connect_kwargs
 
 
 @functools.lru_cache()
