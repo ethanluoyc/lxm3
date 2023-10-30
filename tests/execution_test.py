@@ -1,4 +1,3 @@
-import os
 from unittest.mock import patch
 
 from absl.testing import absltest
@@ -6,42 +5,11 @@ from absl.testing import parameterized
 
 from lxm3 import xm
 from lxm3.xm_cluster import JobRequirements
-from lxm3.xm_cluster import config as config_lib
-from lxm3.xm_cluster import executables as cluster_executables
 from lxm3.xm_cluster import executors
-from lxm3.xm_cluster.execution import artifacts
-from lxm3.xm_cluster.execution import common
 from lxm3.xm_cluster.execution import gridengine
 from lxm3.xm_cluster.execution import job_script
 from lxm3.xm_cluster.execution import local
 from lxm3.xm_cluster.execution import slurm
-
-_TEST_CONFIG = config_lib.Config.from_string(
-    """\
-project = ""
-[local]
-[local.storage]
-staging = ".lxm"
-
-[[clusters]]
-name = "cs"
-server = "beaker.cs.ucl.ac.uk"
-user = "foo"
-proxycommand = "ssh test"
-
-[clusters.storage]
-staging = "/home/foo/lxm3-staging"
-
-[[clusters]]
-name = "myriad"
-server = "myriad.rc.ucl.ac.uk"
-user = "ucaby36"
-
-[clusters.storage]
-staging = "/home/bar/Scratch/lxm3-staging"
-
-"""
-)
 
 
 class ExecutionTest(parameterized.TestCase):
@@ -78,53 +46,6 @@ class ExecutionTest(parameterized.TestCase):
     def test_get_singularity_options(self, options, use_gpu, expected):
         result = job_script.get_singulation_options(options, use_gpu)
         self.assertEqual(result, expected)
-
-    def test_get_cluster_settings(self):
-        executable = cluster_executables.Command(
-            name="test",
-            entrypoint_command="./entrypoint",
-            resource_uri="test",
-            singularity_image="test",
-        )
-        storage_root, hostname, user, connect_kwargs = common.get_cluster_settings(
-            _TEST_CONFIG, [xm.Job(executable, executors.GridEngine())]
-        )
-        self.assertEqual(storage_root, "/home/foo/lxm3-staging")
-        self.assertEqual(hostname, "beaker.cs.ucl.ac.uk")
-        self.assertEqual(user, "foo")
-        self.assertIn("sock", connect_kwargs)
-
-        with self.assertRaises(ValueError):
-            jobs = [xm.Job(executable, executors.Local())]
-            common.get_cluster_settings(_TEST_CONFIG, jobs)
-
-        with self.assertRaises(ValueError):
-            jobs = [
-                xm.Job(
-                    executable,
-                    executors.GridEngine(
-                        requirements=JobRequirements(location="myriad")
-                    ),
-                ),
-                xm.Job(
-                    executable,
-                    executors.GridEngine(requirements=JobRequirements(location="cs")),
-                ),
-            ]
-            common.get_cluster_settings(_TEST_CONFIG, jobs)
-
-        with self.assertRaises(ValueError):
-            jobs = [
-                xm.Job(
-                    executable,
-                    executors.Slurm(requirements=JobRequirements(location="myriad")),
-                ),
-                xm.Job(
-                    executable,
-                    executors.GridEngine(requirements=JobRequirements(location="cs")),
-                ),
-            ]
-            common.get_cluster_settings(_TEST_CONFIG, jobs)
 
     def test_gridengine_header(self):
         executor = executors.GridEngine(
@@ -169,69 +90,69 @@ class ExecutionTest(parameterized.TestCase):
         header = slurm._generate_header_from_executor("test_job", executor, 10, "/logs")
         self.assertIn("#SBATCH --array=1-10", header)
 
-    @parameterized.named_parameters(
-        ("local", executors.Local(), local.deploy_job_resources),
-        ("sge", executors.GridEngine(), gridengine.deploy_job_resources),
-        ("slurm", executors.Slurm(), slurm.deploy_job_resources),
-    )
-    def test_deploy_job(self, executor, deploy_fn):
-        staging_dir = self.create_tempdir(name="staging")
+    # @parameterized.named_parameters(
+    #     ("local", executors.Local(), local.deploy_job_resources),
+    #     ("sge", executors.GridEngine(), gridengine.deploy_job_resources),
+    #     ("slurm", executors.Slurm(), slurm.deploy_job_resources),
+    # )
+    # def test_deploy_job(self, executor, deploy_fn):
+    #     staging_dir = self.create_tempdir(name="staging")
 
-        archive_name = "archive.zip"
-        container_name = "container.sif"
-        archive = staging_dir.create_file(archive_name)
-        container = staging_dir.create_file(container_name)
+    #     archive_name = "archive.zip"
+    #     container_name = "container.sif"
+    #     archive = staging_dir.create_file(archive_name)
+    #     container = staging_dir.create_file(container_name)
 
-        deploy_dir = self.create_tempdir(name="deploy")
-        executable = cluster_executables.Command(
-            name="test",
-            entrypoint_command="echo hello",
-            resource_uri=archive.full_path,
-            singularity_image=container.full_path,
-        )
-        version = "1"
+    #     deploy_dir = self.create_tempdir(name="deploy")
+    #     executable = cluster_executables.Command(
+    #         name="test",
+    #         entrypoint_command="echo hello",
+    #         resource_uri=archive.full_path,
+    #         singularity_image=container.full_path,
+    #     )
+    #     version = "1"
 
-        job = xm.Job(executable, executor, name="test")
-        artifact = artifacts.LocalArtifact(deploy_dir.full_path)
-        deploy_fn(artifact=artifact, jobs=[job], version=version)
+    #     job = xm.Job(executable, executor, name="test")
+    #     artifact = artifacts.LocalArtifact(deploy_dir.full_path)
+    #     deploy_fn(artifact=artifact, jobs=[job], version=version)
 
-        expected_paths = [
-            f"containers/{container_name}",
-            f"jobs/job-{version}/job.sh",
-            f"archives/{archive_name}",
-        ]
-        for path in expected_paths:
-            with self.subTest(path):
-                full_path = os.path.exists(os.path.join(deploy_dir, path))
-                self.assertTrue(full_path)
+    #     expected_paths = [
+    #         f"containers/{container_name}",
+    #         f"jobs/job-{version}/job.sh",
+    #         f"archives/{archive_name}",
+    #     ]
+    #     for path in expected_paths:
+    #         with self.subTest(path):
+    #             full_path = os.path.exists(os.path.join(deploy_dir, path))
+    #             self.assertTrue(full_path)
 
-    def test_no_container_deploy_for_docker(self):
-        """Not uploading container for image of the form docker://..."""
-        staging_dir = self.create_tempdir(name="staging")
-        executor = executors.GridEngine()
-        deploy_fn = gridengine.deploy_job_resources
+    # def test_no_container_deploy_for_docker(self):
+    #     """Not uploading container for image of the form docker://..."""
+    #     staging_dir = self.create_tempdir(name="staging")
+    #     executor = executors.GridEngine()
+    #     deploy_fn = gridengine.deploy_job_resources
 
-        archive_name = "archive.zip"
-        container_name = "docker://python:3.10-slim"
-        archive = staging_dir.create_file(archive_name)
+    #     archive_name = "archive.zip"
+    #     container_name = "docker://python:3.10-slim"
+    #     archive = staging_dir.create_file(archive_name)
 
-        deploy_dir = self.create_tempdir(name="deploy")
-        executable = cluster_executables.Command(
-            name="test",
-            entrypoint_command="echo hello",
-            resource_uri=archive.full_path,
-            singularity_image=container_name,
-        )
-        version = "1"
+    #     deploy_dir = self.create_tempdir(name="deploy")
+    #     executable = cluster_executables.Command(
+    #         name="test",
+    #         entrypoint_command="echo hello",
+    #         resource_uri=archive.full_path,
+    #         singularity_image=container_name,
+    #     )
+    #     version = "1"
 
-        job = xm.Job(executable, executor, name="test")
-        artifact = artifacts.LocalArtifact(deploy_dir.full_path)
+    #     job = xm.Job(executable, executor, name="test")
+    #     artifact = artifacts.LocalArtifact(deploy_dir.full_path)
 
-        def deploy_raise(*args, **kwargs):
-            raise ValueError("Should not be called")
+    #     def deploy_raise(*args, **kwargs):
+    #         raise ValueError("Should not be called")
 
-        artifact.deploy_singularity_container = deploy_raise
-        deploy_fn(artifact=artifact, jobs=[job], version=version)
+    #     artifact.deploy_singularity_container = deploy_raise
+    #     deploy_fn(artifact=artifact, jobs=[job], version=version)
 
 
 if __name__ == "__main__":

@@ -1,3 +1,6 @@
+import os
+from unittest import mock
+
 from absl.testing import absltest
 from absl.testing import parameterized
 
@@ -40,10 +43,10 @@ class UCLClusterTest(parameterized.TestCase):
         ),
     )
     def test_cs_cluster(self, requirements, expected_resources, expected_pe):
-        requirements.location = "cs"
-        executor = ucl.UclGridEngine(requirements)
-        self.assertEqual(executor.resources, expected_resources)
-        self.assertEqual(executor.parallel_environments, expected_pe)
+        with mock.patch.dict(os.environ, {"LXM_CLUSTER": "cs"}):
+            executor = ucl.UclGridEngine(requirements)
+            self.assertEqual(executor.resources, expected_resources)
+            self.assertEqual(executor.parallel_environments, expected_pe)
 
     @parameterized.named_parameters(
         (
@@ -78,10 +81,10 @@ class UCLClusterTest(parameterized.TestCase):
         ),
     )
     def test_myriad_cluster(self, requirements, expected_resources, expected_pe):
-        requirements.location = "myriad"
-        executor = ucl.UclGridEngine(requirements)
-        self.assertEqual(executor.resources, expected_resources)
-        self.assertEqual(executor.parallel_environments, expected_pe)
+        with mock.patch.dict(os.environ, {"LXM_CLUSTER": "myriad"}):
+            executor = ucl.UclGridEngine(requirements)
+            self.assertEqual(executor.resources, expected_resources)
+            self.assertEqual(executor.parallel_environments, expected_pe)
 
     def test_invalid_location(self):
         requirements = cluster_requirements.JobRequirements(location="unknown")

@@ -117,12 +117,13 @@ def UclGridEngine(
         "myriad": _myriad_executor_fn,
         "cs": _cs_executor_fn,
     }
-    location = requirements.location or config.default().default_cluster()
-    if location not in executor_fns:
+    if requirements.location is not None:
+        raise ValueError("location is not supported requirements")
+    cluster = config.default().default_cluster()
+    if cluster not in executor_fns:
         raise ValueError(
-            f"Unsupported location {location} for UCL GridEngine. Supported locations: "
+            f"Unsupported location {cluster} for UCL GridEngine. Supported locations: "
             f"{list(executor_fns.keys())}"
         )
-    executor = executor_fns[location](requirements, walltime=walltime, **kwargs)
-    executor.requirements.location = location
+    executor = executor_fns[cluster](requirements, walltime=walltime, **kwargs)
     return executor

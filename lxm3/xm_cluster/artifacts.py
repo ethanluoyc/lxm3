@@ -1,5 +1,6 @@
 import abc
 import datetime
+import logging
 import os
 from typing import Any, Mapping, Optional
 
@@ -9,6 +10,9 @@ import rich.syntax
 from fsspec.implementations.sftp import SFTPFileSystem
 
 from lxm3.xm_cluster.console import console
+
+# Disable verbose logging from paramiko
+logging.getLogger("paramiko").setLevel(logging.WARNING)
 
 
 class Artifact(abc.ABC):
@@ -33,9 +37,6 @@ class Artifact(abc.ABC):
 
     def job_script_path(self, job_name: str):
         return os.path.join(self.job_path(job_name), "job.sh")
-
-    def job_array_wrapper_path(self, job_name: str):
-        return os.path.join(self.job_path(job_name), "array_wrapper.sh")
 
     def singularity_image_path(self, image_name: str):
         return os.path.join(self._storage_root, "containers", image_name)
@@ -77,15 +78,13 @@ class Artifact(abc.ABC):
         self._fs.makedirs(os.path.dirname(dst), exist_ok=True)
         self._fs.put(local_filename, dst)
 
-    def deploy_job_scripts(self, job_name, job_script, array_wrapper=None):
+    def deploy_job_scripts(self, job_name, job_script):
         job_path = self.job_path(job_name)
         job_log_path = os.path.join(job_path, "logs")
 
         self._fs.makedirs(job_path, exist_ok=True)
         self._fs.makedirs(job_log_path, exist_ok=True)
         self._put_content(self.job_script_path(job_name), job_script)
-        if array_wrapper is not None:
-            self._put_content(self.job_array_wrapper_path(job_name), array_wrapper)
         console.log(f"Created job script {self.job_script_path(job_name)}")
 
     def deploy_singularity_container(self, singularity_image):
