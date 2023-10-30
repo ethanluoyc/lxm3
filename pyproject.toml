@@ -45,9 +45,8 @@ repository = "https://github.com/ethanluoyc/lxm3"
 lxm3 = "lxm3.cli.cli:entrypoint"
 
 [project.optional-dependencies]
-shell = [
-  "IPython"
-]
+shell = ["IPython"]
+docker = ["docker"]
 
 
 [tool.hatch.envs.default]

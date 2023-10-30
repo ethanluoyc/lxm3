@@ -3,11 +3,13 @@ import datetime
 import functools
 import glob
 import os
+import pathlib
 import shutil
 import subprocess
 import tempfile
 from typing import Any, Sequence
 
+import appdirs
 from absl import logging
 
 from lxm3 import singularity
@@ -207,12 +209,53 @@ def _package_singularity_container(
     executable = _PACKAGING_ROUTER(container.entrypoint, packageable, artifact)
 
     singularity_image = container.image_path
-    transport, _ = singularity.uri.split(singularity_image)
+    transport, ref = singularity.uri.split(singularity_image)
     if not transport:
         deploy_container_path = artifact.singularity_image_path(
             os.path.basename(singularity_image)
         )
         artifact.deploy_singularity_container(singularity_image)
+    elif transport == "docker-daemon":
+        # Try building singularity image using cache
+        filename = singularity.uri.filename(singularity_image, "sif")
+        build_cache_dir = pathlib.Path(appdirs.user_cache_dir("lxm3"), "singularity")
+        cache_image_path = build_cache_dir / filename
+        marker_file = cache_image_path.with_suffix(
+            cache_image_path.suffix + ".image_id"
+        )
+        import docker
+
+        client = docker.from_env()
+        image_id: str = client.images.get(ref).id  # type: ignore
+
+        should_rebuild = True
+        if cache_image_path.exists():
+            if marker_file.exists():
+                old_image_id = pathlib.Path(marker_file).read_text().strip()
+                should_rebuild = old_image_id != image_id
+                if should_rebuild:
+                    console.log("Image ID changed, rebuilding...")
+                else:
+                    console.log("Reusing cached image from", cache_image_path)
+            else:
+                should_rebuild = True
+                console.log("Marker file does not exist, rebuilding...")
+        else:
+            should_rebuild = True
+            console.log("Container cache does not exist, rebuilding...")
+
+        if should_rebuild:
+            cache_image_path.parent.mkdir(parents=True, exist_ok=True)
+            singularity.images.build_singularity_image(
+                cache_image_path, singularity_image, force=True
+            )
+            console.log("Cached image at", cache_image_path)
+            pathlib.Path(marker_file).write_text(image_id)
+
+        deploy_container_path = artifact.singularity_image_path(
+            os.path.basename(cache_image_path)
+        )
+        artifact.deploy_singularity_container(str(cache_image_path))
     else:
         deploy_container_path = singularity_image
 
