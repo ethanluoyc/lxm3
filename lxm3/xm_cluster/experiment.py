@@ -164,7 +164,7 @@ class ClusterExperiment(xm.Experiment):
     def __init__(
         self,
         experiment_title: str,
-        config: Mapping[str, Any],
+        config: config_lib.Config,
         vcs: Optional[vcsinfo.VCS] = None,
     ) -> None:
         super().__init__()
@@ -329,6 +329,6 @@ def create_experiment(
     vcs = _load_vcsinfo()
 
     if not config.project() and vcs is not None:
-        config.data["project"] = vcs.name
+        config.set_project(vcs.name)
 
     return ClusterExperiment(experiment_title, config=config)

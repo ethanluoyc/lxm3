@@ -1,6 +1,5 @@
 import functools
 import os
-from collections import UserDict
 from typing import Any, Dict, Optional
 
 import appdirs
@@ -12,7 +11,101 @@ LXM_CONFIG = flags.DEFINE_string(
 )
 
 
-class Config(UserDict):
+class SingularitySettings:
+    def __init__(self, data) -> None:
+        self._data = data
+
+    def __repr__(self) -> str:
+        return repr(self._data)
+
+    @property
+    def command(self) -> str:
+        return self._data.get("cmd", "singularity")
+
+    @property
+    def binds(self) -> Dict[str, str]:
+        binds = self._data.get("binds", [])
+        return {bind["src"]: bind["dest"] for bind in binds}
+
+    @property
+    def env(self) -> Dict[str, str]:
+        return self._data.get("env", {})
+
+
+class LocalSettings:
+    def __init__(self, data) -> None:
+        self._data = data
+
+    def __repr__(self) -> str:
+        return repr(self._data)
+
+    @property
+    def storage_root(self) -> str:
+        return self._data["storage"]["staging"]
+
+    @property
+    def env(self) -> Dict[str, str]:
+        return self._data.get("env", {})
+
+    @property
+    def singularity(self) -> SingularitySettings:
+        return SingularitySettings(self._data.get("singularity", {}))
+
+
+class ClusterSettings:
+    def __init__(self, data) -> None:
+        self._data = data
+
+    def __repr__(self) -> str:
+        return repr(self._data)
+
+    @property
+    def storage_root(self):
+        return self._data["storage"]["staging"]
+
+    @property
+    def hostname(self):
+        return self._data.get("server", None)
+
+    @property
+    def user(self):
+        return self._data.get("user", None)
+
+    @property
+    def ssh_config(self):
+        connect_kwargs = {}
+        proxycommand = self._data.get("proxycommand", None)
+        if proxycommand is not None:
+            import paramiko
+
+            connect_kwargs["sock"] = paramiko.ProxyCommand(proxycommand)
+
+        ssh_private_key = self._data.get("ssh_private_key", None)
+        if ssh_private_key is not None:
+            connect_kwargs["key_filename"] = os.path.expanduser(ssh_private_key)
+
+        password = self._data.get("password", None)
+        if password is not None:
+            connect_kwargs["password"] = password
+
+        return connect_kwargs
+
+    @property
+    def env(self) -> Dict[str, str]:
+        return self._data.get("env", {})
+
+    @property
+    def singularity(self) -> SingularitySettings:
+        return SingularitySettings(self._data.get("singularity", {}))
+
+
+class Config:
+    def __init__(self, data) -> None:
+        self._data = data
+
+    def __repr__(self) -> Any:
+        return repr(self._data)
+
     @classmethod
     def from_file(cls, path: str) -> "Config":
         with open(path, "rt") as f:
@@ -28,44 +121,27 @@ class Config(UserDict):
         project = os.environ.get("LXM_PROJECT", None)
         if project is not None:
             return project
-        return self.data.get("project", None)
+        return self._data.get("project", None)
 
-    def local_config(self) -> Dict[str, Any]:
-        return self.data["local"]
+    def set_project(self, project):
+        self._data["project"] = project
+
+    def local_settings(self) -> LocalSettings:
+        return LocalSettings(self._data["local"])
 
     def default_cluster(self) -> str:
         cluster = os.environ.get("LXM_CLUSTER", None)
         if cluster is None:
-            cluster = self.data["clusters"][0]["name"]
+            cluster = self._data["clusters"][0]["name"]
         return cluster
 
-    def get_cluster_settings(self):
+    def cluster_settings(self) -> ClusterSettings:
         location = self.default_cluster()
-        clusters = {cluster["name"]: cluster for cluster in self.data["clusters"]}
+        clusters = {cluster["name"]: cluster for cluster in self._data["clusters"]}
         if location not in clusters:
             raise ValueError("Unknown cluster")
         cluster_config = clusters[location]
-        storage_root = cluster_config["storage"]["staging"]
-        hostname = cluster_config.get("server", None)
-        user = cluster_config.get("user", None)
-
-        connect_kwargs = {}
-
-        proxycommand = cluster_config.get("proxycommand", None)
-        if proxycommand is not None:
-            import paramiko
-
-            connect_kwargs["sock"] = paramiko.ProxyCommand(proxycommand)
-
-        ssh_private_key = cluster_config.get("ssh_private_key", None)
-        if ssh_private_key is not None:
-            connect_kwargs["key_filename"] = os.path.expanduser(ssh_private_key)
-
-        password = cluster_config.get("password", None)
-        if password is not None:
-            connect_kwargs["password"] = password
-
-        return storage_root, hostname, user, connect_kwargs
+        return ClusterSettings(cluster_config)
 
 
 @functools.lru_cache()

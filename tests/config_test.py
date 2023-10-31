@@ -38,12 +38,12 @@ def _test_config():
 class ConfigTest(parameterized.TestCase):
     def test_config(self):
         config = _test_config()
-        self.assertTrue(isinstance(config["clusters"], list))
-        self.assertEqual(config["clusters"][0]["name"], "cs")
+        self.assertTrue(isinstance(config._data["clusters"], list))
+        self.assertEqual(config._data["clusters"][0]["name"], "cs")
 
     def test_local_config(self):
         config = _test_config()
-        self.assertEqual(config.local_config()["storage"], {"staging": ".lxm"})
+        self.assertEqual(config.local_settings().storage_root, ".lxm")
 
     def test_default_cluster(self):
         config = _test_config()
@@ -52,7 +52,7 @@ class ConfigTest(parameterized.TestCase):
             self.assertEqual(config.default_cluster(), "myriad")
 
     def test_config_project(self):
-        config = config_lib.Config()
+        config = config_lib.Config.from_string("")
         self.assertEqual(config.project(), None)
         with unittest.mock.patch.dict("os.environ", {"LXM_PROJECT": "test"}):
             self.assertEqual(config.project(), "test")
