@@ -1,5 +1,6 @@
 *.sif
 examples/**/lxm.toml
+/scratch
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

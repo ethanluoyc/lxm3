@@ -1,0 +1,3 @@
+mujoco_py @ https://github.com/ethanluoyc/mujoco-py/releases/download/v2.1.2.14%2Bmanylinux/mujoco_py-2.1.2.14+manylinux-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl; python_version == '3.8'
+mujoco_py @ https://github.com/ethanluoyc/mujoco-py/releases/download/v2.1.2.14%2Bmanylinux/mujoco_py-2.1.2.14+manylinux-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl; python_version == '3.9'
+mujoco_py @ https://github.com/ethanluoyc/mujoco-py/releases/download/v2.1.2.14%2Bmanylinux/mujoco_py-2.1.2.14+manylinux-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl; python_version == '3.10'
