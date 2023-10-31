@@ -23,11 +23,12 @@ class SingularitySettings:
         return self._data.get("cmd", "singularity")
 
     @property
-    def binds(self) -> str:
-        return self._data.get("bind", [])
+    def binds(self) -> Dict[str, str]:
+        binds = self._data.get("binds", [])
+        return {bind["src"]: bind["dest"] for bind in binds}
 
     @property
-    def env(self) -> str:
+    def env(self) -> Dict[str, str]:
         return self._data.get("env", {})
 
 
@@ -41,6 +42,10 @@ class LocalSettings:
     @property
     def storage_root(self) -> str:
         return self._data["storage"]["staging"]
+
+    @property
+    def env(self) -> Dict[str, str]:
+        return self._data.get("env", {})
 
     @property
     def singularity(self) -> SingularitySettings:
@@ -130,7 +135,7 @@ class Config:
             cluster = self._data["clusters"][0]["name"]
         return cluster
 
-    def get_cluster_settings(self) -> ClusterSettings:
+    def cluster_settings(self) -> ClusterSettings:
         location = self.default_cluster()
         clusters = {cluster["name"]: cluster for cluster in self._data["clusters"]}
         if location not in clusters:

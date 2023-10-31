@@ -38,7 +38,7 @@ class SingularityOptions(xm.ExecutorSpec):
                lxm3 will do it for you.
     """
 
-    bind: Optional[Dict[str, str]] = None
+    bind: Dict[str, str] = attr.Factory(dict)
     extra_options: Sequence[str] = attr.Factory(list)
 
 

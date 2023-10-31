@@ -172,7 +172,7 @@ async def launch(config: config_lib.Config, jobs: List[xm.Job]) -> List[SlurmHan
             "Only GridEngine executors are supported by the gridengine backend."
         )
 
-    cluster_settings = config_lib.default().get_cluster_settings()
+    cluster_settings = config_lib.default().cluster_settings()
 
     artifact = artifacts.create_artifact_store(
         cluster_settings.storage_root,

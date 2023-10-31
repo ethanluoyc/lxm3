@@ -1,11 +1,19 @@
+import copy
 import os
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 from lxm3 import xm
 from lxm3.xm_cluster import config as config_lib
 from lxm3.xm_cluster import executables
 from lxm3.xm_cluster import executors
 from lxm3.xm_cluster.execution import job_script
+
+
+def _apply_env_overrides(job: xm.Job, env_overrides: Dict[str, str]):
+    job.env_vars = copy.copy(job.env_vars)
+    for k, v in env_overrides.items():
+        if k not in job.env_vars:
+            job.env_vars[k] = v
 
 
 def create_array_job(
@@ -24,6 +32,22 @@ def create_array_job(
         Union[config_lib.LocalSettings, config_lib.ClusterSettings]
     ] = None,
 ):
+    if settings is not None:
+        # Apply cluster env overrides
+        for job in jobs:
+            _apply_env_overrides(job, settings.env)
+
+    if singularity_image is not None and settings is not None:
+        for job in jobs:
+            _apply_env_overrides(job, settings.singularity.env)
+
+        if singularity_options is None:
+            singularity_options = executors.SingularityOptions()
+        else:
+            singularity_options = copy.deepcopy(singularity_options)
+        for src, dst in settings.singularity.binds.items():
+            singularity_options.bind.update({src: dst})
+
     array_wrapper = _create_array_wrapper(executable, jobs, task_offset)
     deploy_archive_path = executable.resource_uri
     setup_cmds = """

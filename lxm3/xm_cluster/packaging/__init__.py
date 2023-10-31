@@ -290,9 +290,9 @@ def _executor_packaging_router(packageable: xm.Packageable):
         del executor_spec
 
         config = config_lib.default()
-        local_config = config_lib.default().local_config()
+        local_settings = config_lib.default().local_settings()
         artifact = artifacts.LocalArtifact(
-            local_config["storage"]["staging"], project=config.project()
+            local_settings.storage_root, project=config.project()
         )
         return _PACKAGING_ROUTER(packageable.executable_spec, packageable, artifact)
 
@@ -302,14 +302,14 @@ def _executor_packaging_router(packageable: xm.Packageable):
     ):
         del executor_spec
         config = config_lib.default()
-        storage_root, hostname, user, connect_kwargs = config.get_cluster_settings()
+        cluster_settings = config.cluster_settings()
 
         artifact = artifacts.create_artifact_store(
-            storage_root,
-            hostname=hostname,
-            user=user,
+            cluster_settings.storage_root,
+            hostname=cluster_settings.hostname,
+            user=cluster_settings.user,
             project=config.project(),
-            connect_kwargs=connect_kwargs,
+            connect_kwargs=cluster_settings.ssh_config,
         )
 
         return _PACKAGING_ROUTER(packageable.executable_spec, packageable, artifact)
@@ -319,14 +319,14 @@ def _executor_packaging_router(packageable: xm.Packageable):
     ):
         del executor_spec
         config = config_lib.default()
-        storage_root, hostname, user, connect_kwargs = config.get_cluster_settings()
+        cluster_settings = config.cluster_settings()
 
         artifact = artifacts.create_artifact_store(
-            storage_root,
-            hostname=hostname,
-            user=user,
+            cluster_settings.storage_root,
+            hostname=cluster_settings.hostname,
+            user=cluster_settings.user,
             project=config.project(),
-            connect_kwargs=connect_kwargs,
+            connect_kwargs=cluster_settings.ssh_config,
         )
 
         return _PACKAGING_ROUTER(packageable.executable_spec, packageable, artifact)

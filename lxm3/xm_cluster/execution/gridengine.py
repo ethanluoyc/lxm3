@@ -206,7 +206,7 @@ async def launch(
     if len(jobs) < 1:
         return []
 
-    cluster_settings = config_lib.default().get_cluster_settings()
+    cluster_settings = config_lib.default().cluster_settings()
 
     artifact = artifacts.create_artifact_store(
         cluster_settings.storage_root,
