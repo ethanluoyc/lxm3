@@ -64,6 +64,7 @@ def _get_setup_cmds(
 
 
 def create_job_script(
+    local_settings: config_lib.LocalSettings,
     artifact: artifacts.Artifact,
     jobs: List[xm.Job],
     version: Optional[str] = None,
@@ -94,6 +95,7 @@ def create_job_script(
         task_id_var_name=_TASK_ID_VAR_NAME,
         setup=setup,
         header=header,
+        settings=local_settings,
     )
 
 
@@ -112,12 +114,12 @@ async def launch(config: config_lib.Config, jobs: List[xm.Job]):
     if len(jobs) < 1:
         return []
 
-    local_config = config.local_config()
+    local_config = config.local_settings()
     artifact = artifacts.LocalArtifact(
-        local_config["storage"]["staging"], project=config.project()
+        local_config.storage_root, project=config.project()
     )
     version = datetime.datetime.now().strftime("%Y%m%d.%H%M%S")
-    job_script_content = create_job_script(artifact, jobs, version)
+    job_script_content = create_job_script(local_config, artifact, jobs, version)
     job_name = f"job-{version}"
 
     job_script_dir = artifact.job_path(job_name)

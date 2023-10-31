@@ -121,7 +121,12 @@ def _get_setup_cmds(
     return "\n".join(cmds)
 
 
-def create_job_script(jobs: List[xm.Job], job_name, job_script_dir) -> str:
+def create_job_script(
+    cluster_settings: config_lib.ClusterSettings,
+    jobs: List[xm.Job],
+    job_name,
+    job_script_dir,
+) -> str:
     executable = jobs[0].executable
     executor = jobs[0].executor
 
@@ -143,6 +148,7 @@ def create_job_script(jobs: List[xm.Job], job_name, job_script_dir) -> str:
         task_id_var_name=_TASK_ID_VAR_NAME,
         setup=setup,
         header=header,
+        settings=cluster_settings,
     )
 
 
@@ -166,31 +172,30 @@ async def launch(config: config_lib.Config, jobs: List[xm.Job]) -> List[SlurmHan
             "Only GridEngine executors are supported by the gridengine backend."
         )
 
-    (
-        storage_root,
-        hostname,
-        user,
-        connect_kwargs,
-    ) = config_lib.default().get_cluster_settings()
+    cluster_settings = config_lib.default().get_cluster_settings()
 
     artifact = artifacts.create_artifact_store(
-        storage_root,
-        hostname=hostname,
-        user=user,
+        cluster_settings.storage_root,
+        hostname=cluster_settings.hostname,
+        user=cluster_settings.user,
         project=config.project(),
-        connect_kwargs=connect_kwargs,
+        connect_kwargs=cluster_settings.ssh_config,
     )
 
     version = datetime.datetime.now().strftime("%Y%m%d.%H%M%S")
     job_name = f"job-{version}"
     job_script_dir = artifact.job_path(job_name)
-    job_script_content = create_job_script(jobs, job_name, job_script_dir)
+    job_script_content = create_job_script(
+        cluster_settings, jobs, job_name, job_script_dir
+    )
 
     artifact.deploy_job_scripts(job_name, job_script_content)
     job_script_path = os.path.join(job_script_dir, job_script.JOB_SCRIPT_NAME)
 
     console.log(f"Launch with command:\n  sbatch {job_script_path}")
-    client = slurm.Client(hostname=hostname, username=user)
+    client = slurm.Client(
+        hostname=cluster_settings.hostname, username=cluster_settings.user
+    )
 
     job_id = client.launch(job_script_path)
     common.write_job_id(artifact, job_script_path, str(job_id))

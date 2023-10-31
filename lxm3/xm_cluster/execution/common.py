@@ -1,7 +1,8 @@
 import os
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from lxm3 import xm
+from lxm3.xm_cluster import config as config_lib
 from lxm3.xm_cluster import executables
 from lxm3.xm_cluster import executors
 from lxm3.xm_cluster.execution import job_script
@@ -19,6 +20,9 @@ def create_array_job(
     task_id_var_name: str,
     setup: str,
     header: str,
+    settings: Optional[
+        Union[config_lib.LocalSettings, config_lib.ClusterSettings]
+    ] = None,
 ):
     array_wrapper = _create_array_wrapper(executable, jobs, task_offset)
     deploy_archive_path = executable.resource_uri
