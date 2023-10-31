@@ -1,4 +1,5 @@
 # https://github.com/sylabs/singularity/blob/main/internal/pkg/util/uri/uri_test.go
+import appdirs
 from absl.testing import absltest
 from absl.testing import parameterized
 
@@ -42,6 +43,14 @@ class URITest(parameterized.TestCase):
             msg="incorrectly parsed uri as %s : %s (expected %s : %s)"
             % (tr, r, transport, ref),
         )
+
+    def test_build_image_from_daemon(self):
+        build_spec = "docker-daemon://jax-cuda:latest"
+        transport, ref = singularity.uri.split(build_spec)
+        self.assertEqual(transport, "docker-daemon")
+        filename = singularity.uri.filename(build_spec, "sif")
+        self.assertEqual(filename, "jax-cuda_latest.sif")
+        appdirs.user_cache_dir("lxm3")
 
 
 if __name__ == "__main__":
