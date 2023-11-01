@@ -11,19 +11,19 @@ from lxm3.xm_cluster.console import console
 
 def main(_):
     config = config_lib.default()
-    location = config.default_cluster()
-    cluster_config = config.cluster_config(location)
-    hostname = cluster_config["server"]
-    user = cluster_config["user"]
+    cluster_settings = config.cluster_settings()
 
-    console.log(f"Creating a client to cluster {user}@{hostname} ...")
+    console.log(
+        "Creating a client to cluster "
+        f"{cluster_settings.user}@{cluster_settings.hostname} ..."
+    )
 
     c = Config()
     c.InteractiveShellApp.exec_lines = [
         "%load_ext rich",
     ]
 
-    client = gridengine.Client(hostname, user)
+    client = gridengine.Client(cluster_settings.hostname, cluster_settings.user)
     IPython.start_ipython(argv=[], config=c, user_ns={"client": client})
 
 
