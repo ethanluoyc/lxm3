@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional
 import appdirs
 import tomlkit
 from absl import flags
+from absl import logging
 
 LXM_CONFIG = flags.DEFINE_string(
     "lxm_config", os.environ.get("LXM_CONFIG"), "Path to lxm configuration."
@@ -147,17 +148,24 @@ class Config:
 @functools.lru_cache()
 def default() -> Config:
     # The path may be relative, especially if it comes from sys.argv[0].
-    if LXM_CONFIG.value is not None:
-        return Config.from_file(LXM_CONFIG.value)
+    try:
+        if LXM_CONFIG.value is not None:
+            logging.debug("Loading config from %s", LXM_CONFIG.value)
+            return Config.from_file(LXM_CONFIG.value)
+    except flags.UnparsedFlagAccessError:
+        logging.debug("Unable to load config from flag")
     # Use file from environment variable
     lxm_config_path = os.environ.get("LXM_CONFIG", None)
     if lxm_config_path is not None:
+        logging.debug("Loading config from %s", lxm_config_path)
         return Config.from_file(lxm_config_path)
     cwd_path = os.path.join(os.getcwd(), "lxm.toml")
     if os.path.exists(cwd_path):
+        logging.debug("Loading config from %s", cwd_path)
         return Config.from_file(cwd_path)
     user_config_path = os.path.join(appdirs.user_config_dir("lxm3"), "config.toml")
     if os.path.exists(user_config_path):
+        logging.debug("Loading config from %s", cwd_path)
         return Config.from_file(user_config_path)
     else:
         raise ValueError("Unable to load Config")
