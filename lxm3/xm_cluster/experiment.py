@@ -1,11 +1,9 @@
 import asyncio
-import contextlib
 import functools
 import subprocess
-import threading
 import time
 from concurrent import futures
-from typing import Any, Awaitable, Callable, List, Mapping, Optional
+from typing import Any, Awaitable, Callable, List, Mapping, Optional, Union
 
 import vcsinfo
 from absl import logging
@@ -16,6 +14,7 @@ from lxm3._vendor.xmanager.xm import core
 from lxm3._vendor.xmanager.xm import id_predictor
 from lxm3._vendor.xmanager.xm import job_blocks
 from lxm3._vendor.xmanager.xm import pattern_matching as pm
+from lxm3.xm_cluster import array_job as array_job_lib
 from lxm3.xm_cluster import config as config_lib
 from lxm3.xm_cluster import executors
 from lxm3.xm_cluster import metadata
@@ -100,7 +99,6 @@ class ClusterWorkUnit(xm.WorkUnit):
         self._launched_jobs_args = launched_jobs_args
         self._work_unit_id = work_unit_id_predictor.reserve_id()
         self._work_unit_id_predictor = work_unit_id_predictor
-        self._launch_event = threading.Event()
         self._local_handles = []
         self._non_local_handles = []
 
@@ -116,23 +114,23 @@ class ClusterWorkUnit(xm.WorkUnit):
         async with self._work_unit_id_predictor.submit_id(self._work_unit_id):  # type: ignore
             await self._submit_job_for_execution(job_group, args)
 
-        # This is used by batched experiment to wait for all jobs to be launched.
-        # before initiating a batch context
-        self._launch_event.set()
+    async def _launch_job_config(self, job, args, identity):
+        del identity
+        assert not args
+        async with self._work_unit_id_predictor.submit_id(self._work_unit_id):  # type: ignore
+            await self._submit_job_for_execution(job, args)
 
-    async def _submit_job_for_execution(self, job_group: xm.JobGroup, args):
-        jobs: List[xm.Job] = list(job_group.jobs.values())  # type: ignore
-        assert len(jobs) == 1
-        if self.experiment.is_in_batch():
-
-            def callback(result):
-                self._ingest_handles(result)
-
+    async def _submit_job_for_execution(
+        self, job_group: Union[xm.JobGroup, array_job_lib.ArrayJob], args
+    ):
+        if isinstance(job_group, xm.JobGroup):
+            jobs: List[xm.Job] = list(job_group.jobs.values())  # type: ignore
             assert len(jobs) == 1
-            self.experiment._register_delayed_job((jobs[0], args), callback)
-        else:
             launch_result = await _launch(jobs)
-            self._ingest_handles(launch_result)
+        else:
+            jobs = array_job_lib.flatten_array_job(job_group)
+            launch_result = await _launch(jobs)
+        self._ingest_handles(launch_result)
 
     def _ingest_handles(self, launch_result):
         """"""
@@ -172,59 +170,9 @@ class ClusterExperiment(xm.Experiment):
         self.launched_jobs_args = []
         self._work_units = []
         self._experiment_id = int(time.time() * 10**3)
-        self._in_batch_lock = threading.Lock()
-        self._in_batch = False
-        self.delayed_jobs = []
         self._experiment_title = experiment_title
         self._config = config
         self._vcs = vcs
-
-    def is_in_batch(self):
-        with self._in_batch_lock:
-            return self._in_batch
-
-    @contextlib.contextmanager
-    def batch(self):
-        is_coro_context = False
-        try:
-            asyncio.get_running_loop()
-            is_coro_context = True
-        except RuntimeError:
-            pass
-        if is_coro_context:
-            raise RuntimeError(
-                "Launching batch experiment from async context is not yet supported."
-            )
-        try:
-            assert not self._in_batch
-            if len(self._work_units) > 0:
-                self._work_units[-1]._launch_event.wait()
-            self._in_batch = True
-            yield
-        finally:
-            if len(self._work_units) > 0:
-                self._work_units[-1]._launch_event.wait()
-            delayed_jobs = [j[0] for j in self.delayed_jobs]
-            delayed_cb = [j[2] for j in self.delayed_jobs]
-
-            async def launch_array_jobs():
-                array_launch_result = await _launch(delayed_jobs)
-                results = []
-                if array_launch_result.local_handles:
-                    results = [_LaunchResult(array_launch_result.local_handles, [])]
-                else:
-                    results = [_LaunchResult([], array_launch_result.non_local_handles)]
-
-                for callback, results in zip(delayed_cb, results):
-                    callback(results)
-
-            self._create_task(launch_array_jobs())
-            self.delayed_jobs = []
-            self._in_batch = False
-
-    def _register_delayed_job(self, job_and_args, callback):
-        job, args = job_and_args
-        self.delayed_jobs.append((job, args, callback))
 
     def _create_experiment_unit(
         self,

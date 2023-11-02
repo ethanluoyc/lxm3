@@ -64,11 +64,18 @@ class ExperimentTest(parameterized.TestCase):
         jobs = [job] * 2
         mock_launch.return_value = _fake_launch(jobs)
         experiment = xm_cluster.create_experiment("test", self._config)
-        with experiment, experiment.batch():
-            for job in jobs:
-                experiment.add(job)
+        parameters = [
+            {"args": {"seed": 1}},
+            {"args": {"seed": 2}},
+        ]
+        with experiment:
+            experiment.add(
+                xm_cluster.ArrayJob(
+                    self._executable, xm_cluster.Local(), work_list=parameters
+                )
+            )
         self.assertEqual(len(mock_launch.call_args[0][0]), 2)
-        self.assertEqual(experiment.work_unit_count, 2)
+        self.assertEqual(experiment.work_unit_count, 1)
         mock_launch.assert_called_once()
 
 

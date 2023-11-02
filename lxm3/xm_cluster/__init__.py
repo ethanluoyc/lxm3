@@ -1,3 +1,6 @@
+from lxm3.xm_cluster.array_job import ArrayJob
+from lxm3.xm_cluster.array_job import WorkItem
+from lxm3.xm_cluster.array_job import WorkList
 from lxm3.xm_cluster.config import Config
 from lxm3.xm_cluster.executable_specs import CommandList
 from lxm3.xm_cluster.executable_specs import Fileset
