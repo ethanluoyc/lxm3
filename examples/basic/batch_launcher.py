@@ -23,13 +23,11 @@ def main(_):
             [xm.Packageable(spec, executor_spec=executor.Spec())]
         )
 
-        parameters = [
-            {"args": {"seed": 1}, "env_vars": {"TASK": "1"}},
-            {"args": {"seed": 2}, "env_vars": {"TASK": "2"}},
-        ]
+        args = [{"seed": seed} for seed in range(2)]
+        env_vars = [{"TASK": f"foo_{seed}"} for seed in range(2)]
         experiment.add(
             xm_cluster.ArrayJob(
-                executable=executable, executor=executor, work_list=parameters
+                executable=executable, executor=executor, args=args, env_vars=env_vars
             )
         )
 

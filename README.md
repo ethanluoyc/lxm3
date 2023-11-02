@@ -163,9 +163,9 @@ from lxm3 import xm_cluster
 with xm_cluster.create_experiment() as experiment:
     executable = ...
     executor = ...
-    parameters = [{"args": {"seed": seed}} for seed in range(5)]
+    parameters = [{"seed": seed} for seed in range(5)]
     experiment.add(
-        xm_cluster.ArrayJob(executable=executable, executor=executor, work_list={"seed": seed})
+        xm_cluster.ArrayJob(executable=executable, executor=executor, args=parameters)
     )
 ```
 This will be translated as passing `--seed {0..4}` to your executable. We

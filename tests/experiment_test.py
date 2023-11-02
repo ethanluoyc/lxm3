@@ -64,14 +64,11 @@ class ExperimentTest(parameterized.TestCase):
         jobs = [job] * 2
         mock_launch.return_value = _fake_launch(jobs)
         experiment = xm_cluster.create_experiment("test", self._config)
-        parameters = [
-            {"args": {"seed": 1}},
-            {"args": {"seed": 2}},
-        ]
+        parameters = [{"seed": 1}, {"seed": 2}]
         with experiment:
             experiment.add(
                 xm_cluster.ArrayJob(
-                    self._executable, xm_cluster.Local(), work_list=parameters
+                    self._executable, xm_cluster.Local(), args=parameters
                 )
             )
         self.assertEqual(len(mock_launch.call_args[0][0]), 2)

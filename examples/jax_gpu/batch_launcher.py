@@ -46,12 +46,11 @@ def main(_):
 
         # To submit parameter sweep by array jobs, you can use the batch context
         # Without the batch context, jobs with be submitted individually.
-        parameters = [
-            {"args": {"seed": i}, "env_vars": {"TASK": str(i)}} for i in range(2)
-        ]
+        args = [{"seed": seed} for seed in range(2)]
+        env_vars = [{"TASK": f"foo_{seed}"} for seed in range(2)]
         experiment.add(
             xm_cluster.ArrayJob(
-                executable=executable, executor=executor, work_list=parameters
+                executable=executable, executor=executor, args=args, env_vars=env_vars
             )
         )
 
