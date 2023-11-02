@@ -23,7 +23,9 @@ def main(_):
         "%load_ext rich",
     ]
 
-    client = gridengine.Client(cluster_settings.hostname, cluster_settings.user)
+    client = gridengine.GridEngineCluster(
+        cluster_settings.hostname, cluster_settings.user
+    )
     IPython.start_ipython(argv=[], config=c, user_ns={"client": client})
 
 

@@ -26,18 +26,18 @@ class SlurmTest(parameterized.TestCase):
             slurm.parse_job_id("Failed")
 
 
-class ClientTest(absltest.TestCase):
+class ClusterTest(absltest.TestCase):
     @mock.patch("fabric.Connection")
-    def test_client(self, mock_connection):
+    def test_cluster(self, mock_connection):
         instance = mock_connection.return_value
         instance.run.return_value = fabric.Result(
             connection=instance,
             stdout="Submitted batch job 6",
         )
-        client = slurm.Client(hostname="host", username="user")
-        job_id = client.launch("job.sbatch")
+        cluster = slurm.SlurmCluster(hostname="host", username="user")
+        job_id = cluster.launch("job.sbatch")
         self.assertEqual(job_id, 6)
-        client.close()
+        cluster.close()
 
 
 if __name__ == "__main__":

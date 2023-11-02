@@ -88,7 +88,7 @@ lxm3 provides the following executable specification and executors.
 
 ### Jobs
 * Currently, only `xm.Job` and `xm.JobGenerator` that generates `xm.Job` are supported.
-* We support HPC array jobs via `experiment.batch()`. See below.
+* We support HPC array jobs via `xm_cluster.ArrayJob`. See below.
 
 ## Implementation Details
 ### __Managing Dependencies with Containers__

@@ -1,28 +1,24 @@
 import asyncio
 import atexit
 import concurrent.futures
-import datetime
+import functools
 import os
 import shutil
 import subprocess
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from absl import logging
 
 from lxm3 import xm
+from lxm3.xm_cluster import array_job as array_job_lib
 from lxm3.xm_cluster import artifacts
 from lxm3.xm_cluster import config as config_lib
 from lxm3.xm_cluster import executables
 from lxm3.xm_cluster import executors
 from lxm3.xm_cluster.console import console
-from lxm3.xm_cluster.execution import common
 from lxm3.xm_cluster.execution import job_script
 
 _LOCAL_EXECUTOR: Optional[concurrent.futures.ThreadPoolExecutor] = None
-
-_TASK_OFFSET = 1
-_JOB_SCRIPT_SHEBANG = "#!/usr/bin/env bash"
-_TASK_ID_VAR_NAME = "SGE_TASK_ID"
 
 
 def local_executor():
@@ -39,64 +35,48 @@ def local_executor():
     return _LOCAL_EXECUTOR
 
 
-def _is_gpu_requested(executor: executors.Local) -> bool:
-    return shutil.which("nvidia-smi") is not None
+class LocalJobScriptBuilder(job_script.JobScriptBuilder):
+    TASK_OFFSET = 1
+    JOB_SCRIPT_SHEBANG = "#!/usr/bin/env bash"
+    TASK_ID_VAR_NAME = "LOCAL_TASK_ID"
 
+    @classmethod
+    def _is_gpu_requested(cls, executor: executors.Local) -> bool:
+        return shutil.which("nvidia-smi") is not None
 
-def _create_job_header(
-    executor: executors.Local, jobs: List[xm.Job], job_script_dir: str, job_name: str
-) -> str:
-    return ""
+    @classmethod
+    def _create_setup_cmds(
+        cls, executable: executables.Command, executor: executors.GridEngine
+    ) -> str:
+        del executor
+        cmds = ["echo >&2 INFO[$(basename $0)]: Running on host $(hostname)"]
 
+        if executable.singularity_image is not None:
+            cmds.append(
+                "echo >&2 INFO[$(basename $0)]: Singularity version: $(singularity --version)"
+            )
+        return "\n".join(cmds)
 
-def _get_setup_cmds(
-    executable: executables.Command,
-    executor: executors.Local,
-) -> str:
-    del executor
-    cmds = ["echo >&2 INFO[$(basename $0)]: Running on host $(hostname)"]
+    @classmethod
+    def _create_job_header(
+        cls,
+        executor: executors.GridEngine,
+        num_array_tasks: Optional[int],
+        job_script_dir: str,
+        job_name: str,
+    ) -> str:
+        del executor, num_array_tasks, job_script_dir, job_name
+        return ""
 
-    if executable.singularity_image is not None:
-        cmds.append(
-            "echo >&2 INFO[$(basename $0)]: Singularity version: $(singularity --version)"
-        )
-    return "\n".join(cmds)
-
-
-def create_job_script(
-    local_settings: config_lib.LocalSettings,
-    artifact: artifacts.Artifact,
-    jobs: List[xm.Job],
-    version: Optional[str] = None,
-) -> str:
-    version = version or datetime.datetime.now().strftime("%Y%m%d.%H%M%S")
-    job_name = f"job-{version}"
-
-    executable = jobs[0].executable
-    executor = jobs[0].executor
-
-    assert isinstance(executor, executors.Local)
-    assert isinstance(executable, executables.Command)
-    job_script.validate_same_job_configuration(jobs)
-
-    job_script_dir = artifact.job_path(job_name)
-
-    setup = _get_setup_cmds(executable, executor)
-    header = _create_job_header(executor, jobs, job_script_dir, job_name)
-
-    return common.create_array_job(
-        executable=executable,
-        singularity_image=executable.singularity_image,
-        singularity_options=executor.singularity_options,
-        jobs=jobs,
-        use_gpu=_is_gpu_requested(executor),
-        job_script_shebang=_JOB_SCRIPT_SHEBANG,
-        task_offset=_TASK_OFFSET,
-        task_id_var_name=_TASK_ID_VAR_NAME,
-        setup=setup,
-        header=header,
-        settings=local_settings,
-    )
+    def build(
+        self,
+        job: Union[xm.Job, array_job_lib.ArrayJob],
+        job_name: str,
+        job_script_dir: str,
+    ) -> str:
+        assert isinstance(job.executor, executors.Local)
+        assert isinstance(job.executable, executables.Command)
+        return super().build(job, job_name, job_script_dir)
 
 
 class LocalExecutionHandle:
@@ -110,33 +90,79 @@ class LocalExecutionHandle:
         await asyncio.wrap_future(self.future)
 
 
-async def launch(config: config_lib.Config, jobs: List[xm.Job]):
-    if len(jobs) < 1:
-        return []
+def _local_job_predicate(job):
+    if isinstance(job, xm.Job):
+        return isinstance(job.executor, executors.Local)
+    elif isinstance(job, array_job_lib.ArrayJob):
+        return isinstance(job.executor, executors.Local)
+    else:
+        raise ValueError(f"Unexpected job type: {type(job)}")
 
-    local_config = config.local_settings()
-    artifact = artifacts.LocalArtifact(
-        local_config.storage_root, project=config.project()
-    )
-    version = datetime.datetime.now().strftime("%Y%m%d.%H%M%S")
-    job_script_content = create_job_script(local_config, artifact, jobs, version)
-    job_name = f"job-{version}"
 
-    job_script_dir = artifact.job_path(job_name)
-    artifact.deploy_job_scripts(job_name, job_script_content)
-    job_script_path = os.path.join(job_script_dir, job_script.JOB_SCRIPT_NAME)
+class LocalClient(job_script.JobClient):
+    builder_cls = LocalJobScriptBuilder
 
-    console.print(f"Launching {len(jobs)} jobs locally...")
-    handles = []
-    for i in range(len(jobs)):
+    def __init__(
+        self,
+        settings: Optional[config_lib.LocalSettings] = None,
+        artifact: Optional[artifacts.LocalArtifact] = None,
+    ) -> None:
+        if settings is None:
+            config = config_lib.default()
+            settings = config.local_settings()
+        self._settings = settings
 
-        def task(i):
-            subprocess.run(
-                ["bash", job_script_path],
-                env={**os.environ, _TASK_ID_VAR_NAME: str(i + _TASK_OFFSET)},
+        if artifact is None:
+            config = config_lib.default()
+            artifact = artifacts.LocalArtifact(
+                self._settings.storage_root, project=config.project()
             )
 
-        future = local_executor().submit(task, i)
-        handles.append(LocalExecutionHandle(future))
+        self._artifact = artifact
 
-    return handles
+    def _launch(self, job_script_path, num_jobs):
+        console.print(f"Launching {num_jobs} jobs locally...")
+        handles = []
+        for i in range(num_jobs):
+
+            def task(i):
+                subprocess.run(
+                    ["bash", job_script_path],
+                    env={
+                        **os.environ,
+                        LocalJobScriptBuilder.TASK_ID_VAR_NAME: str(
+                            i + LocalJobScriptBuilder.TASK_OFFSET
+                        ),
+                    },
+                )
+
+            future = local_executor().submit(task, i)
+            handles.append(LocalExecutionHandle(future))
+
+        return None, handles
+
+
+@functools.lru_cache()
+def client() -> LocalClient:
+    return LocalClient()
+
+
+async def launch(job_name: str, job: job_script.ClusterJob):
+    if isinstance(job, array_job_lib.ArrayJob):
+        jobs = [job]  # type: ignore
+    elif isinstance(job, xm.JobGroup):
+        jobs: List[xm.Job] = xm.job_operators.flatten_jobs(job)
+    elif isinstance(job, xm.Job):
+        jobs = [job]
+
+    jobs = [job for job in jobs if _local_job_predicate(job)]
+
+    if not jobs:
+        return []
+
+    if len(jobs) > 1:
+        raise ValueError(
+            "Cannot launch a job group with multiple jobs as a single job."
+        )
+
+    return client().launch(job_name, jobs[0])

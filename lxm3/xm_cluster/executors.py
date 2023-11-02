@@ -23,7 +23,7 @@ def _convert_time(
 
 
 @attr.s(auto_attribs=True)
-class SingularityOptions(xm.ExecutorSpec):
+class SingularityOptions:
     """Options for singularity container.
 
     Args:
@@ -39,6 +39,26 @@ class SingularityOptions(xm.ExecutorSpec):
     """
 
     bind: Dict[str, str] = attr.Factory(dict)
+    extra_options: Sequence[str] = attr.Factory(list)
+
+
+@attr.s(auto_attribs=True)
+class DockerOptions:
+    """Options for singularity container.
+
+    Args:
+        bind: Mapping of the form ``{src: dst}``.
+        User-bind path specification of the form ``-B <src>:<dst>``.
+        extra_options: Extra commandline options to pass to singularity.
+
+          When using the ``extra_options``, be aware of the following:
+            1. lxm3 currently probably won't likely work with
+               ``--contain``, ``--pwd`` and ``-wd``,
+            2. You don't have to pass ``--nv`` for GPU jobs,
+               lxm3 will do it for you.
+    """
+
+    volumes: Dict[str, str] = attr.Factory(dict)
     extra_options: Sequence[str] = attr.Factory(list)
 
 
@@ -59,8 +79,11 @@ class Local(xm.Executor):
     requirements: JobRequirements = attr.Factory(JobRequirements)
 
     singularity_options: Optional[SingularityOptions] = None
+    docker_options: Optional[DockerOptions] = None
 
-    Spec = LocalSpec  # type: ignore
+    @classmethod
+    def Spec(cls) -> LocalSpec:
+        return LocalSpec()
 
 
 @attr.s(auto_attribs=True)
@@ -134,8 +157,11 @@ class GridEngine(xm.Executor):
     skip_directives: Sequence[str] = attr.Factory(list)
 
     singularity_options: Optional[SingularityOptions] = None
+    docker_options: Optional[DockerOptions] = None
 
-    Spec = GridEngineSpec  # type: ignore
+    @classmethod
+    def Spec(cls) -> GridEngineSpec:
+        return GridEngineSpec()
 
 
 @attr.s(auto_attribs=True)
@@ -154,6 +180,7 @@ class Slurm(xm.Executor):
     )
 
     singularity_options: Optional[SingularityOptions] = None
+    docker_options: Optional[DockerOptions] = None
 
     log_directory: Optional[str] = None
     # Modules to load before running the job
@@ -165,4 +192,6 @@ class Slurm(xm.Executor):
     extra_directives: Sequence[str] = attr.Factory(list)
     skip_directives: Sequence[str] = attr.Factory(list)
 
-    Spec = SlurmSpec  # type: ignore
+    @classmethod
+    def Spec(cls) -> SlurmSpec:
+        return SlurmSpec()

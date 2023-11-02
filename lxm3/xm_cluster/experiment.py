@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import functools
 import subprocess
 import time
@@ -10,13 +11,11 @@ from absl import logging
 
 from lxm3._vendor.xmanager import xm
 from lxm3._vendor.xmanager.xm import async_packager
-from lxm3._vendor.xmanager.xm import core
 from lxm3._vendor.xmanager.xm import id_predictor
 from lxm3._vendor.xmanager.xm import job_blocks
 from lxm3._vendor.xmanager.xm import pattern_matching as pm
 from lxm3.xm_cluster import array_job as array_job_lib
 from lxm3.xm_cluster import config as config_lib
-from lxm3.xm_cluster import executors
 from lxm3.xm_cluster import metadata
 from lxm3.xm_cluster import packaging
 from lxm3.xm_cluster.console import console
@@ -25,56 +24,22 @@ from lxm3.xm_cluster.execution import local as local_execution
 from lxm3.xm_cluster.execution import slurm as slurm_execution
 
 
-def _gridengine_job_predicate(job: xm.Job):
-    return isinstance(job.executor, executors.GridEngine)
-
-
-def _slurm_job_predicate(job: xm.Job):
-    return isinstance(job.executor, executors.Slurm)
-
-
-def _local_job_predicate(job: xm.Job):
-    return isinstance(job.executor, executors.Local)
-
-
 class _LaunchResult:
     def __init__(self, local_handles, non_local_handles):
         self.local_handles = local_handles
         self.non_local_handles = non_local_handles
 
 
-async def _launch(jobs: List[xm.Job]):
-    experiment: ClusterExperiment = core._current_experiment.get()  # type: ignore
-    gridengine_jobs = list(filter(_gridengine_job_predicate, jobs))
-    slurm_jobs = list(filter(_slurm_job_predicate, jobs))
-    local_jobs = list(filter(_local_job_predicate, jobs))
-
-    if not (
-        len(gridengine_jobs) == len(jobs)
-        or len(local_jobs) == len(jobs)
-        or len(slurm_jobs) == len(jobs)
-    ):
-        raise ValueError(
-            "ClusterExperiment only supports running only GridEngine XOR "
-            "Local XOR Slurm executors at the same time."
-        )
-
+async def _launch(job: Union[xm.JobGroup, array_job_lib.ArrayJob]):
     local_handles = []
-    if local_jobs:
-        local_handles.extend(
-            await local_execution.launch(experiment._config, local_jobs)  # type: ignore
-        )
-
     non_local_handles = []
-    if gridengine_jobs:
-        non_local_handles.extend(
-            await gridengine_execution.launch(experiment._config, gridengine_jobs)  # type: ignore
-        )
 
-    if slurm_jobs:
-        non_local_handles.extend(
-            await slurm_execution.launch(experiment._config, slurm_jobs)  # type: ignore
-        )
+    version = datetime.datetime.now().strftime("%Y%m%d.%H%M%S")
+    job_name = f"job-{version}"
+
+    local_handles.extend(await local_execution.launch(job_name, job))  # type: ignore
+    non_local_handles.extend(await slurm_execution.launch(job_name, job))  # type: ignore
+    non_local_handles.extend(await gridengine_execution.launch(job_name, job))  # type: ignore
 
     return _LaunchResult(local_handles, non_local_handles)
 
@@ -121,15 +86,9 @@ class ClusterWorkUnit(xm.WorkUnit):
             await self._submit_job_for_execution(job, args)
 
     async def _submit_job_for_execution(
-        self, job_group: Union[xm.JobGroup, array_job_lib.ArrayJob], args
+        self, job: Union[xm.JobGroup, array_job_lib.ArrayJob], args
     ):
-        if isinstance(job_group, xm.JobGroup):
-            jobs: List[xm.Job] = list(job_group.jobs.values())  # type: ignore
-            assert len(jobs) == 1
-            launch_result = await _launch(jobs)
-        else:
-            jobs = array_job_lib.flatten_array_job(job_group)
-            launch_result = await _launch(jobs)
+        launch_result = await _launch(job)
         self._ingest_handles(launch_result)
 
     def _ingest_handles(self, launch_result):
@@ -162,7 +121,6 @@ class ClusterExperiment(xm.Experiment):
     def __init__(
         self,
         experiment_title: str,
-        config: config_lib.Config,
         vcs: Optional[vcsinfo.VCS] = None,
     ) -> None:
         super().__init__()
@@ -171,7 +129,6 @@ class ClusterExperiment(xm.Experiment):
         self._work_units = []
         self._experiment_id = int(time.time() * 10**3)
         self._experiment_title = experiment_title
-        self._config = config
         self._vcs = vcs
 
     def _create_experiment_unit(
@@ -264,19 +221,17 @@ def _load_vcsinfo() -> Optional[vcsinfo.VCS]:
     return vcs
 
 
-def create_experiment(
-    experiment_title: str, config: Optional[config_lib.Config] = None
-) -> ClusterExperiment:
+def create_experiment(experiment_title: str) -> ClusterExperiment:
     """Create a LXM3 experiment backed by the xm_cluster backend.
     Args:
         experiment_title: Title of the experiment.
         config: Optional config object to use. If set, override
             the configuration loaded from the config file.
     """
-    config = config or config_lib.default()
+    config = config_lib.default()
     vcs = _load_vcsinfo()
 
     if not config.project() and vcs is not None:
         config.set_project(vcs.name)
 
-    return ClusterExperiment(experiment_title, config=config)
+    return ClusterExperiment(experiment_title, vcs=vcs)

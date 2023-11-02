@@ -57,6 +57,18 @@ class ConfigTest(parameterized.TestCase):
         with unittest.mock.patch.dict("os.environ", {"LXM_PROJECT": "test"}):
             self.assertEqual(config.project(), "test")
 
+    def test_local_settings(self):
+        settings = config_lib.LocalSettings()
+        self.assertEqual(settings.env, {})
+        self.assertEqual(settings.singularity.env, {})
+        self.assertEqual(settings.singularity.binds, {})
+
+    def test_cluster_settings(self):
+        settings = config_lib.ClusterSettings()
+        self.assertEqual(settings.env, {})
+        self.assertEqual(settings.singularity.env, {})
+        self.assertEqual(settings.singularity.binds, {})
+
 
 if __name__ == "__main__":
     absltest.main()

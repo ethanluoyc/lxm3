@@ -1,5 +1,3 @@
-# type: ignore
-
 from absl import app
 
 from lxm3 import xm
@@ -15,7 +13,7 @@ def main(_):
                 entrypoint=["python3", "main.py"],
                 build_script="build.sh",
             ),
-            xm_cluster.Local.Spec(),  # type: ignore
+            xm_cluster.Local.Spec(),
         )
         [executable] = experiment.package([executable])
         experiment.add(xm.Job(executable=executable, executor=executor))

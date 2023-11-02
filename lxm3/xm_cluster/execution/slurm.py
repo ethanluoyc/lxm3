@@ -1,21 +1,158 @@
-# noqa
 import datetime
+import functools
 import os
 from typing import List, Optional
 
 from lxm3 import xm
 from lxm3.clusters import slurm
+from lxm3.xm_cluster import array_job
 from lxm3.xm_cluster import artifacts
 from lxm3.xm_cluster import config as config_lib
 from lxm3.xm_cluster import executables
 from lxm3.xm_cluster import executors
 from lxm3.xm_cluster.console import console
-from lxm3.xm_cluster.execution import common
 from lxm3.xm_cluster.execution import job_script
 
-_TASK_OFFSET = 1
-_JOB_SCRIPT_SHEBANG = "#!/usr/bin/bash -l"
-_TASK_ID_VAR_NAME = "SLURM_ARRAY_TASK_ID"
+
+class SlurmJobScriptBuilder(job_script.JobScriptBuilder):
+    TASK_OFFSET = 1
+    JOB_SCRIPT_SHEBANG = "#!/usr/bin/bash -l"
+    TASK_ID_VAR_NAME = "SLURM_ARRAY_TASK_ID"
+
+    @classmethod
+    def _is_gpu_requested(cls, executor: executors.Slurm) -> bool:
+        del executor
+        return True  # TODO
+
+    @classmethod
+    def _create_setup_cmds(cls, executable, executor) -> str:
+        cmds = ["echo >&2 INFO[$(basename $0)]: Running on host $(hostname)"]
+
+        for module in executor.modules:
+            cmds.append(f"module load {module}")
+        if cls._is_gpu_requested(executor):
+            cmds.append(
+                "echo >&2 INFO[$(basename $0)]: CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
+            )
+            # cmds.append("nvidia-smi")
+
+        if executable.singularity_image is not None:
+            cmds.append(
+                "echo >&2 INFO[$(basename $0)]: Singularity version: $(singularity --version)"
+            )
+        return "\n".join(cmds)
+
+    @classmethod
+    def _create_job_header(
+        cls,
+        executor: executors.Slurm,
+        num_array_tasks: Optional[int],
+        job_script_dir: str,
+        job_name: str,
+    ) -> str:
+        num_array_tasks = None
+        job_header = header_from_executor(
+            job_name, executor, num_array_tasks, job_script_dir
+        )
+        return job_header
+
+    def build(
+        self, job: job_script.ClusterJob, job_name: str, job_script_dir: str
+    ) -> str:
+        assert isinstance(job.executor, executors.Slurm)
+        assert isinstance(job.executable, executables.Command)
+        return super().build(job, job_name, job_script_dir)
+
+
+class SlurmHandle:
+    def __init__(self, job_id: str) -> None:
+        self.job_id = job_id
+
+    async def wait(self):
+        raise NotImplementedError()
+
+    async def monitor(self):
+        raise NotImplementedError()
+
+
+def _slurm_job_predicate(job):
+    if isinstance(job, xm.Job):
+        return isinstance(job.executor, executors.Slurm)
+    elif isinstance(job, array_job.ArrayJob):
+        return isinstance(job.executor, executors.Slurm)
+    else:
+        raise ValueError(f"Unexpected job type: {type(job)}")
+
+
+class SlurmClient(job_script.JobClient):
+    builder_cls = SlurmJobScriptBuilder
+
+    def __init__(
+        self,
+        settings: Optional[config_lib.ClusterSettings] = None,
+        artifact: Optional[artifacts.Artifact] = None,
+    ) -> None:
+        if settings is None:
+            settings = config_lib.default().cluster_settings()
+        self._settings = settings
+
+        if artifact is None:
+            project = config_lib.default().project()
+            artifact = artifacts.create_artifact_store(
+                settings.storage_root,
+                hostname=settings.hostname,
+                user=settings.user,
+                project=project,
+                connect_kwargs=settings.ssh_config,
+            )
+        self._artifact = artifact
+
+        self._cluster = slurm.SlurmCluster(
+            hostname=self._settings.hostname,
+            username=self._settings.user,
+        )
+
+    def _launch(self, job_script_path, num_jobs):
+        console.log(f"Launch with command:\n  sbatch {job_script_path}")
+        cluster = self._cluster
+        job_id = cluster.launch(job_script_path)
+        console.log(f"Successfully launched job {job_id}")
+        if num_jobs > 1:
+            job_ids = [f"{job_id}_{i}" for i in range(num_jobs)]
+        else:
+            job_ids = [f"{job_id}"]
+        return job_id, [SlurmHandle(j) for j in job_ids]
+
+
+@functools.lru_cache()
+def client() -> SlurmClient:
+    return SlurmClient()
+
+
+async def launch(job_name: str, job: job_script.ClusterJob) -> List[SlurmHandle]:
+    if isinstance(job, array_job.ArrayJob):
+        jobs = [job]  # type: ignore
+    elif isinstance(job, xm.JobGroup):
+        jobs: List[xm.Job] = xm.job_operators.flatten_jobs(job)
+    elif isinstance(job, xm.Job):
+        jobs = [job]
+
+    jobs = [job for job in jobs if _slurm_job_predicate(job)]
+
+    if not jobs:
+        return []
+
+    if len(jobs) > 1:
+        raise ValueError(
+            "Cannot launch a job group with multiple jobs as a single job."
+        )
+
+    if not isinstance(jobs[0].executor, executors.Slurm):
+        raise ValueError(
+            "Only GridEngine executors are supported by the gridengine backend."
+        )
+
+    return client().launch(job_name, jobs[0])
 
 
 def _format_slurm_time(duration: datetime.timedelta) -> str:
@@ -31,7 +168,7 @@ def _format_slurm_time(duration: datetime.timedelta) -> str:
         return "{:02}:{:02}:{:02}".format(hours, minutes, seconds)
 
 
-def _generate_header_from_executor(
+def header_from_executor(
     job_name: str,
     executor: executors.Slurm,
     num_array_tasks: Optional[int],
@@ -83,126 +220,3 @@ def _generate_header_from_executor(
         header.append(line)
 
     return "\n".join(header)
-
-
-def _is_gpu_requested(executor: executors.Slurm) -> bool:
-    return True  # TODO
-
-
-def _create_job_header(
-    executor: executors.Slurm, jobs: List[xm.Job], job_script_dir: str, job_name: str
-) -> str:
-    num_array_tasks = len(jobs) if len(jobs) > 1 else None
-    job_header = _generate_header_from_executor(
-        job_name, executor, num_array_tasks, job_script_dir
-    )
-
-    return job_header
-
-
-def _get_setup_cmds(
-    executable: executables.Command,
-    executor: executors.Slurm,
-) -> str:
-    cmds = ["echo >&2 INFO[$(basename $0)]: Running on host $(hostname)"]
-
-    for module in executor.modules:
-        cmds.append(f"module load {module}")
-    if _is_gpu_requested(executor):
-        cmds.append(
-            "echo >&2 INFO[$(basename $0)]: CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
-        )
-        # cmds.append("nvidia-smi")
-
-    if executable.singularity_image is not None:
-        cmds.append(
-            "echo >&2 INFO[$(basename $0)]: Singularity version: $(singularity --version)"
-        )
-    return "\n".join(cmds)
-
-
-def create_job_script(
-    cluster_settings: config_lib.ClusterSettings,
-    jobs: List[xm.Job],
-    job_name,
-    job_script_dir,
-) -> str:
-    executable = jobs[0].executable
-    executor = jobs[0].executor
-
-    assert isinstance(executor, executors.Slurm)
-    assert isinstance(executable, executables.Command)
-    job_script.validate_same_job_configuration(jobs)
-
-    setup = _get_setup_cmds(executable, executor)
-    header = _create_job_header(executor, jobs, job_script_dir, job_name)
-
-    return common.create_array_job(
-        executable=executable,
-        singularity_image=executable.singularity_image,
-        singularity_options=executor.singularity_options,
-        jobs=jobs,
-        use_gpu=_is_gpu_requested(executor),
-        job_script_shebang=_JOB_SCRIPT_SHEBANG,
-        task_offset=_TASK_OFFSET,
-        task_id_var_name=_TASK_ID_VAR_NAME,
-        setup=setup,
-        header=header,
-        settings=cluster_settings,
-    )
-
-
-class SlurmHandle:
-    def __init__(self, job_id: str) -> None:
-        self.job_id = job_id
-
-    async def wait(self):
-        raise NotImplementedError()
-
-    async def monitor(self):
-        raise NotImplementedError()
-
-
-async def launch(config: config_lib.Config, jobs: List[xm.Job]) -> List[SlurmHandle]:
-    if len(jobs) < 1:
-        return []
-
-    if not isinstance(jobs[0].executor, executors.Slurm):
-        raise ValueError(
-            "Only GridEngine executors are supported by the gridengine backend."
-        )
-
-    cluster_settings = config_lib.default().cluster_settings()
-
-    artifact = artifacts.create_artifact_store(
-        cluster_settings.storage_root,
-        hostname=cluster_settings.hostname,
-        user=cluster_settings.user,
-        project=config.project(),
-        connect_kwargs=cluster_settings.ssh_config,
-    )
-
-    version = datetime.datetime.now().strftime("%Y%m%d.%H%M%S")
-    job_name = f"job-{version}"
-    job_script_dir = artifact.job_path(job_name)
-    job_script_content = create_job_script(
-        cluster_settings, jobs, job_name, job_script_dir
-    )
-
-    artifact.deploy_job_scripts(job_name, job_script_content)
-    job_script_path = os.path.join(job_script_dir, job_script.JOB_SCRIPT_NAME)
-
-    console.log(f"Launch with command:\n  sbatch {job_script_path}")
-    client = slurm.Client(
-        hostname=cluster_settings.hostname, username=cluster_settings.user
-    )
-
-    job_id = client.launch(job_script_path)
-    common.write_job_id(artifact, job_script_path, str(job_id))
-    if len(jobs) > 1:
-        job_ids = [f"{job_id}_{i}" for i in range(len(jobs))]
-    else:
-        job_ids = [f"{job_id}"]
-    console.log(f"Successfully launched job {job_id}")
-
-    return [SlurmHandle(j) for j in job_ids]

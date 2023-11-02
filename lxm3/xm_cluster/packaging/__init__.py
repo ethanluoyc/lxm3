@@ -263,6 +263,17 @@ def _package_singularity_container(
     return executable
 
 
+def _package_docker_container(
+    container: cluster_executable_specs.DockerContainer,
+    packageable: xm.Packageable,
+    artifact: artifacts.Artifact,
+):
+    executable = _PACKAGING_ROUTER(container.entrypoint, packageable, artifact)
+    docker_image = container.image
+    executable.docker_image = docker_image
+    return executable
+
+
 def _throw_on_unknown_executable(
     executable: Any,
     packageable: xm.Packageable,
@@ -279,6 +290,7 @@ _PACKAGING_ROUTER = pattern_matching.match(
     _package_python_package,
     _package_universal_package,
     _package_singularity_container,
+    _package_docker_container,
     _throw_on_unknown_executable,
 )
 

@@ -59,21 +59,16 @@ def main(_):
                 )
             )
         else:
-            with experiment.batch():
-                for _ in range(2):
-                    experiment.add(
-                        xm.Job(
-                            executable=executable,
-                            executor=executor,
-                            # You can pass additional arguments to your executable with args
-                            # This will be translated to `--seed 1`
-                            # Note for booleans we currently use the absl.flags convention
-                            # so {'gpu': False} will be translated to `--nogpu`
-                            args={"seed": 1},
-                            # You can customize environment_variables as well.
-                            env_vars={"XLA_PYTHON_CLIENT_PREALLOCATE": "false"},
-                        )
-                    )
+            args = [{"seed": seed} for seed in range(2)]
+            env_vars = [{"TASK": f"foo_{seed}"} for seed in range(2)]
+            experiment.add(
+                xm_cluster.ArrayJob(
+                    executable=executable,
+                    executor=executor,
+                    args=args,
+                    env_vars=env_vars,
+                )
+            )
 
 
 if __name__ == "__main__":
