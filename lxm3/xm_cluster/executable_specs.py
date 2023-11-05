@@ -223,9 +223,7 @@ class SingularityContainer(job_blocks.ExecutableSpec):
 class PDMProject(job_blocks.ExecutableSpec):
     entrypoint: Union[CommandList, ModuleName]
     base_image: str
-    lock_file: str = attr.ib(
-        converter=utils.resolve_path_relative_to_launcher, default="pdm.lock"
-    )
+    lock_file: str = "pdm.lock"
     path: str = attr.ib(converter=utils.resolve_path_relative_to_launcher, default=".")
     resources: List[Fileset] = attr.ib(converter=list, default=attr.Factory(list))
     extra_packages: List[str] = attr.ib(converter=list, default=attr.Factory(list))
@@ -242,9 +240,7 @@ class PDMProject(job_blocks.ExecutableSpec):
 class PythonContainer(job_blocks.ExecutableSpec):
     entrypoint: Union[CommandList, ModuleName]
     base_image: str
-    requirements: str = attr.ib(
-        converter=utils.resolve_path_relative_to_launcher, default="requirements.txt"
-    )
+    requirements: str = "requirements.txt"
     path: str = attr.ib(converter=utils.resolve_path_relative_to_launcher, default=".")
     resources: List[Fileset] = attr.ib(converter=list, default=attr.Factory(list))
     extra_packages: List[str] = attr.ib(converter=list, default=attr.Factory(list))
