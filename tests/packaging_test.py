@@ -21,14 +21,14 @@ class PackagingTest(parameterized.TestCase):
             entrypoint=xm_cluster.ModuleName("py_package.main"),
             path=os.path.join(_HERE, "testdata/test_pkg"),
         )
-        artifact = artifacts.Artifact(fsspec.filesystem("memory"), "/tmp", "test")
+        store = artifacts.ArtifactStore(fsspec.filesystem("memory"), "/tmp", "test")
         executable = packaging._package_python_package(
             spec,
             xm.Packageable(
                 spec,
                 xm_cluster.Local().Spec(),
             ),
-            artifact,
+            store,
         )
         self.assertIsInstance(executable, xm_cluster.Command)
 
@@ -48,20 +48,19 @@ class PackagingTest(parameterized.TestCase):
             path=os.path.join(_HERE, "testdata/test_universal"),
             build_script="build.sh",
         )
-        artifact = artifacts.Artifact(fsspec.filesystem("memory"), "/", "test")
+        store = artifacts.ArtifactStore(fsspec.filesystem("memory"), "/", "test")
         executable = packaging._package_universal_package(
             spec,
             xm.Packageable(
                 spec,
                 xm_cluster.Local().Spec(),
             ),
-            artifact,
+            store,
         )
         self.assertIsInstance(executable, xm_cluster.Command)
         # Check that archive exists
-        self.assertTrue(artifact._fs.exists(executable.resource_uri))
-        # TODO(yl): Add this back
-        with artifact._fs.open(executable.resource_uri, "rb") as f:
+        self.assertTrue(store._fs.exists(executable.resource_uri))
+        with store._fs.open(executable.resource_uri, "rb") as f:
             archive = zipfile.ZipFile(f)  # type: ignore
             self.assertEqual(set(archive.namelist()), set(["main.py"]))
 

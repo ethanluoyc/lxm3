@@ -88,7 +88,7 @@ lxm3 provides the following executable specification and executors.
 
 ### Jobs
 * Currently, only `xm.Job` and `xm.JobGenerator` that generates `xm.Job` are supported.
-* We support HPC array jobs via `experiment.batch()`. See below.
+* We support HPC array jobs via `xm_cluster.ArrayJob`. See below.
 
 ## Implementation Details
 ### __Managing Dependencies with Containers__
@@ -149,9 +149,12 @@ with standard Python packaging tools, you can use `xm_cluster.UniversalPackage` 
 ### __Easy Hyperparameter Sweeping__.
 For many scientific research projects, it's common to run the same experiment with different hyperparameters. lxm3 automatically generates jobs scripts that can be submitted to the cluster's scheduler for running multiple experiments with different hyperparameters passed as differnt command line arguments or environment variables.
 
-For large parameter sweep, launching many separate jobs at once can overwhelm the scheduler.
-For this reason, HPC schedulers encourage the use of job arrays to submit sweeps.
-lxm3 provide a `experiment.batch()` context manager that allows you to submit multiple jobs with the same executable and job requirements but different hyperparameters as a single job array.
+For large parameter sweep, launching many separate jobs at once can
+overwhelm the scheduler. For this reason, HPC schedulers encourage the
+use of job arrays to submit sweeps. lxm3 provide a `ArrayJob`
+xm.JobConfig that allows you to submit multiple jobs with the same
+executable and job requirements but different hyperparameters as a
+single job array.
 
 For example:
 ```python
@@ -160,12 +163,10 @@ from lxm3 import xm_cluster
 with xm_cluster.create_experiment() as experiment:
     executable = ...
     executor = ...
-    with experiment.batch():
-        # Jobs under batch() will be submitted as a single array job.
-        for seed in range(5):
-            experiment.add(
-                xm.Job(executable=executable, executor=executor, args={"seed": seed})
-            )
+    parameters = [{"seed": seed} for seed in range(5)]
+    experiment.add(
+        xm_cluster.ArrayJob(executable=executable, executor=executor, args=parameters)
+    )
 ```
 This will be translated as passing `--seed {0..4}` to your executable. We
 also support customzing environment variables, which is convenient for example if you

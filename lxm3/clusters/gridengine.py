@@ -116,7 +116,7 @@ def merge_taskids(task_ids: List[Union[int, str]]) -> List[str]:
     return tasks_str
 
 
-class Client:
+class GridEngineCluster:
     _connection: Optional[fabric.Connection]
 
     def __init__(

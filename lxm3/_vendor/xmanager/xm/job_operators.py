@@ -25,114 +25,111 @@ from lxm3._vendor.xmanager.xm import pattern_matching
 def shallow_copy_job_type(
     job_type: job_blocks.JobTypeVar,
 ) -> job_blocks.JobTypeVar:
-  """Creates a shallow copy of the job structure."""
+    """Creates a shallow copy of the job structure."""
 
-  def apply_to_job_group(job_group: job_blocks.JobGroup) -> job_blocks.JobGroup:
-    job_group = copy.copy(job_group)
-    job_group.jobs = {key: matcher(job) for key, job in job_group.jobs.items()}
-    return job_group
+    def apply_to_job_group(job_group: job_blocks.JobGroup) -> job_blocks.JobGroup:
+        job_group = copy.copy(job_group)
+        job_group.jobs = {key: matcher(job) for key, job in job_group.jobs.items()}
+        return job_group
 
-  matcher = pattern_matching.match(
-      pattern_matching.Case([job_blocks.Job], copy.copy),
-      apply_to_job_group,
-      pattern_matching.Case(
-          [job_blocks.JobGeneratorType], lambda generator: generator
-      ),
-      pattern_matching.Case([job_blocks.JobConfig], copy.copy),
-  )
-  return matcher(job_type)
+    matcher = pattern_matching.match(
+        pattern_matching.Case([job_blocks.Job], copy.copy),
+        apply_to_job_group,
+        pattern_matching.Case(
+            [job_blocks.JobGeneratorType], lambda generator: generator
+        ),
+        pattern_matching.Case([job_blocks.JobConfig], copy.copy),
+    )
+    return matcher(job_type)
 
 
 def populate_job_names(job_type: job_blocks.JobTypeVar) -> None:
-  """Assigns default names to the given jobs."""
+    """Assigns default names to the given jobs."""
 
-  def apply_to_job(prefix: Sequence[str], target: job_blocks.Job) -> None:
-    if target.name is None:
-      target.name = '_'.join(prefix) if prefix else target.executable.name
+    def apply_to_job(prefix: Sequence[str], target: job_blocks.Job) -> None:
+        if target.name is None:
+            target.name = "_".join(prefix) if prefix else target.executable.name
 
-  def apply_to_job_group(
-      prefix: Sequence[str], target: job_blocks.JobGroup
-  ) -> None:
-    for key, job in target.jobs.items():
-      matcher([*prefix, key], job)
+    def apply_to_job_group(prefix: Sequence[str], target: job_blocks.JobGroup) -> None:
+        for key, job in target.jobs.items():
+            matcher([*prefix, key], job)
 
-  def ignore_unknown(_: Sequence[str], target: Any) -> None:
-    return target
+    def ignore_unknown(_: Sequence[str], target: Any) -> None:
+        return target
 
-  matcher = pattern_matching.match(
-      apply_to_job,
-      apply_to_job_group,
-      ignore_unknown,
-  )
-  return matcher([], job_type)
+    matcher = pattern_matching.match(
+        apply_to_job,
+        apply_to_job_group,
+        ignore_unknown,
+    )
+    return matcher([], job_type)
 
 
 def collect_jobs_by_filter(
     job_group: job_blocks.JobGroup,
     predicate: Callable[[job_blocks.Job], bool],
 ) -> List[job_blocks.Job]:
-  """Flattens a given job group and filters the result."""
+    """Flattens a given job group and filters the result."""
 
-  def match_job(job: job_blocks.Job) -> List[job_blocks.Job]:
-    return [job] if predicate(job) else []
+    def match_job(job: job_blocks.Job) -> List[job_blocks.Job]:
+        return [job] if predicate(job) else []
 
-  def match_job_group(job_group: job_blocks.JobGroup) -> List[job_blocks.Job]:
-    return list(
-        itertools.chain.from_iterable(
-            [job_collector(job) for job in job_group.jobs.values()]
+    def match_job_group(job_group: job_blocks.JobGroup) -> List[job_blocks.Job]:
+        return list(
+            itertools.chain.from_iterable(
+                [job_collector(job) for job in job_group.jobs.values()]
+            )
         )
-    )
 
-  job_collector = pattern_matching.match(match_job_group, match_job)
-  return job_collector(job_group)
+    job_collector = pattern_matching.match(match_job_group, match_job)
+    return job_collector(job_group)
 
 
 @attr.s(auto_attribs=True)
 class ConstraintClique:
-  """A constraint with the list of jobs it applies to."""
+    """A constraint with the list of jobs it applies to."""
 
-  constraint: job_blocks.Constraint
-  jobs: List[job_blocks.Job]
+    constraint: job_blocks.Constraint
+    jobs: List[job_blocks.Job]
 
 
 def aggregate_constraint_cliques(
     job_group: job_blocks.JobGroup,
 ) -> List[ConstraintClique]:
-  """Forms constraint cliques.
+    """Forms constraint cliques.
 
-  For each constraint met, collects all jobs it applies to.
+    For each constraint met, collects all jobs it applies to.
 
-  Args:
-    job_group: A job group to aggregate on.
+    Args:
+      job_group: A job group to aggregate on.
 
-  Returns:
-    A set of cliques.
-  """
+    Returns:
+      A set of cliques.
+    """
 
-  def match_job(
-      job: job_blocks.Job,
-  ) -> Tuple[List[ConstraintClique], List[job_blocks.Job]]:
-    return [], [job]
+    def match_job(
+        job: job_blocks.Job,
+    ) -> Tuple[List[ConstraintClique], List[job_blocks.Job]]:
+        return [], [job]
 
-  def match_job_group(
-      job_group: job_blocks.JobGroup,
-  ) -> Tuple[List[ConstraintClique], List[job_blocks.Job]]:
-    cliques: List[ConstraintClique] = []
-    jobs: List[job_blocks.Job] = []
-    for job in job_group.jobs.values():
-      subcliques, subjobs = matcher(job)
-      cliques += subcliques
-      jobs += subjobs
-    cliques = [
-        ConstraintClique(constraint, jobs)
-        for constraint in job_group.constraints
-    ] + cliques
-    return cliques, jobs
+    def match_job_group(
+        job_group: job_blocks.JobGroup,
+    ) -> Tuple[List[ConstraintClique], List[job_blocks.Job]]:
+        cliques: List[ConstraintClique] = []
+        jobs: List[job_blocks.Job] = []
+        for job in job_group.jobs.values():
+            subcliques, subjobs = matcher(job)
+            cliques += subcliques
+            jobs += subjobs
+        cliques = [
+            ConstraintClique(constraint, jobs) for constraint in job_group.constraints
+        ] + cliques
+        return cliques, jobs
 
-  matcher = pattern_matching.match(match_job, match_job_group)
-  result, _ = matcher(job_group)
-  return result
+    matcher = pattern_matching.match(match_job, match_job_group)
+    result, _ = matcher(job_group)
+    return result
 
 
 def flatten_jobs(job_group: job_blocks.JobGroup) -> List[job_blocks.Job]:
-  return collect_jobs_by_filter(job_group, lambda _: True)
+    return collect_jobs_by_filter(job_group, lambda _: True)

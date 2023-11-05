@@ -14,7 +14,7 @@ def parse_job_id(output: str) -> int:
     return int(match.group("id"))
 
 
-class Client:
+class SlurmCluster:
     _connection: Optional[fabric.Connection] = None
 
     def __init__(

@@ -1,6 +1,6 @@
 import functools
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Protocol
 
 import appdirs
 import tomlkit
@@ -20,10 +20,6 @@ class SingularitySettings:
         return repr(self._data)
 
     @property
-    def command(self) -> str:
-        return self._data.get("cmd", "singularity")
-
-    @property
     def binds(self) -> Dict[str, str]:
         binds = self._data.get("binds", [])
         return {bind["src"]: bind["dest"] for bind in binds}
@@ -33,9 +29,19 @@ class SingularitySettings:
         return self._data.get("env", {})
 
 
-class LocalSettings:
-    def __init__(self, data) -> None:
-        self._data = data
+class ExecutionSettings(Protocol):
+    @property
+    def env(self) -> Dict[str, str]:
+        ...
+
+    @property
+    def singularity(self) -> SingularitySettings:
+        ...
+
+
+class LocalSettings(ExecutionSettings):
+    def __init__(self, data=None) -> None:
+        self._data = data or {}
 
     def __repr__(self) -> str:
         return repr(self._data)
@@ -53,9 +59,9 @@ class LocalSettings:
         return SingularitySettings(self._data.get("singularity", {}))
 
 
-class ClusterSettings:
-    def __init__(self, data) -> None:
-        self._data = data
+class ClusterSettings(ExecutionSettings):
+    def __init__(self, data=None) -> None:
+        self._data = data or {}
 
     def __repr__(self) -> str:
         return repr(self._data)

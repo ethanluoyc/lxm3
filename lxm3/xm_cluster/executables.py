@@ -12,3 +12,4 @@ class Command(xm.Executable):
     args: xm.SequentialArgs = attr.Factory(xm.SequentialArgs)
     env_vars: Dict[str, str] = attr.Factory(dict)
     singularity_image: Optional[str] = None
+    docker_image: Optional[str] = None

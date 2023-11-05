@@ -217,3 +217,20 @@ class SingularityContainer(job_blocks.ExecutableSpec):
                 "launcher's directory."
             )
         self.image_path = image_path
+
+
+@attr.s(auto_attribs=True)
+class DockerContainer(job_blocks.ExecutableSpec):
+    """An executable that can be executed in a Singularity container.
+
+    Attributes:
+        entrypoint: Another ExcutableSpec.
+        image: Name of the Docker image.
+    """
+
+    entrypoint: Union[UniversalPackage, PythonPackage]
+    image: str
+
+    @property
+    def name(self) -> str:
+        return self.entrypoint.name
