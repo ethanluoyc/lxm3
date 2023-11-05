@@ -220,6 +220,44 @@ class SingularityContainer(job_blocks.ExecutableSpec):
 
 
 @attr.s(auto_attribs=True)
+class PDMProject(job_blocks.ExecutableSpec):
+    entrypoint: Union[CommandList, ModuleName]
+    base_image: str
+    lock_file: str = attr.ib(
+        converter=utils.resolve_path_relative_to_launcher, default="pdm.lock"
+    )
+    path: str = attr.ib(converter=utils.resolve_path_relative_to_launcher, default=".")
+    resources: List[Fileset] = attr.ib(converter=list, default=attr.Factory(list))
+    extra_packages: List[str] = attr.ib(converter=list, default=attr.Factory(list))
+    pip_args: List[str] = attr.ib(
+        converter=list, default=attr.Factory(lambda: ["--no-deps", "--no-compile"])
+    )
+
+    @property
+    def name(self) -> str:
+        return name_from_path(self.path)
+
+
+@attr.s(auto_attribs=True)
+class PythonContainer(job_blocks.ExecutableSpec):
+    entrypoint: Union[CommandList, ModuleName]
+    base_image: str
+    requirements: str = attr.ib(
+        converter=utils.resolve_path_relative_to_launcher, default="requirements.txt"
+    )
+    path: str = attr.ib(converter=utils.resolve_path_relative_to_launcher, default=".")
+    resources: List[Fileset] = attr.ib(converter=list, default=attr.Factory(list))
+    extra_packages: List[str] = attr.ib(converter=list, default=attr.Factory(list))
+    pip_args: List[str] = attr.ib(
+        converter=list, default=attr.Factory(lambda: ["--no-deps", "--no-compile"])
+    )
+
+    @property
+    def name(self) -> str:
+        return name_from_path(self.path)
+
+
+@attr.s(auto_attribs=True)
 class DockerContainer(job_blocks.ExecutableSpec):
     """An executable that can be executed in a Singularity container.
 

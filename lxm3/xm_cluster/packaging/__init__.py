@@ -2,6 +2,7 @@ import atexit
 import functools
 import os
 import shutil
+import subprocess
 import tempfile
 from typing import Any, Sequence
 
@@ -73,6 +74,148 @@ def _package_universal_package(
     )
 
 
+_PDM_DOCKERFILE_TEMPLATE = """\
+FROM {base_image} as builder
+RUN pip install pdm
+ADD pdm.lock /app/pdm.lock
+ADD pyproject.toml /app/pyproject.toml
+ADD README.md /app/README.md
+ADD pdm.lock /app/pdm.lock
+
+WORKDIR /app
+RUN pdm install && pdm export > /requirements.txt
+
+FROM {base_image}
+COPY --from=builder /requirements.txt /requirements.txt
+RUN pip install --no-cache-dir -r /requirements.txt
+"""
+
+
+def _package_pdm_project(
+    pdm_project: cluster_executable_specs.PDMProject,
+    packageable: xm.Packageable,
+    artifact_store: artifacts.ArtifactStore,
+):
+    py_package = cluster_executable_specs.PythonPackage(
+        pdm_project.entrypoint,
+        path=pdm_project.path,
+    )
+    with tempfile.TemporaryDirectory() as staging:
+        shutil.copy(
+            os.path.join(pdm_project.lock_file),
+            os.path.join(staging, "pdm.lock"),
+        )
+        shutil.copy(
+            os.path.join(pdm_project.path, "pyproject.toml"),
+            os.path.join(staging, "pyproject.toml"),
+        )
+        shutil.copy(
+            os.path.join(pdm_project.path, "README.md"),
+            os.path.join(staging, "README.md"),
+        )
+        with open(os.path.join(staging, "Dockerfile"), "w") as f:
+            f.write(_PDM_DOCKERFILE_TEMPLATE.format(base_image=pdm_project.base_image))
+        subprocess.run(["docker", "buildx", "build", "-t", py_package.name, staging])
+
+    singularity_image = "docker-daemon://{}:latest".format(py_package.name)
+
+    # Try building singularity image using cache
+    cached_singularity_image = (
+        singularity_builder.build_singularity_image_from_docker_daemon(
+            singularity_image
+        )
+    )
+
+    staging = tempfile.mkdtemp(dir=_staging_directory())
+    archive_name = archive_builder.create_python_archive(staging, py_package)
+    local_archive_path = os.path.join(staging, archive_name)
+    deployed_archive_path = artifact_store.deploy_resource_archive(local_archive_path)
+
+    cache_image_path = singularity_builder.build_singularity_image_from_docker_daemon(
+        singularity_image
+    )
+    deploy_container_path = artifact_store.singularity_image_path(
+        os.path.basename(cache_image_path)
+    )
+    artifact_store.deploy_singularity_container(cached_singularity_image)
+
+    entrypoint_cmd = archive_builder.ENTRYPOINT_SCRIPT
+    executable = cluster_executables.Command(
+        py_package.name,
+        entrypoint_command=entrypoint_cmd,
+        resource_uri=deployed_archive_path,
+        args=packageable.args,
+        env_vars=packageable.env_vars,
+    )
+
+    executable.singularity_image = deploy_container_path
+    return executable
+
+
+_PYTHON_CONTAINER_DOCKER_TEMPLATE = """\
+FROM {base_image}
+COPY requirements.txt /requirements.txt
+RUN pip install --no-cache-dir -r /requirements.txt
+"""
+
+
+def _package_python_container(
+    python_container: cluster_executable_specs.PythonContainer,
+    packageable: xm.Packageable,
+    artifact_store: artifacts.ArtifactStore,
+):
+    py_package = cluster_executable_specs.PythonPackage(
+        python_container.entrypoint,
+        path=python_container.path,
+    )
+    with tempfile.TemporaryDirectory() as staging:
+        shutil.copy(
+            os.path.join(python_container.requirements),
+            os.path.join(staging, "requirements.txt"),
+        )
+        with open(os.path.join(staging, "Dockerfile"), "w") as f:
+            f.write(
+                _PYTHON_CONTAINER_DOCKER_TEMPLATE.format(
+                    base_image=python_container.base_image
+                )
+            )
+        subprocess.run(["docker", "buildx", "build", "-t", py_package.name, staging])
+
+    singularity_image = "docker-daemon://{}:latest".format(py_package.name)
+
+    # Try building singularity image using cache
+    cached_singularity_image = (
+        singularity_builder.build_singularity_image_from_docker_daemon(
+            singularity_image
+        )
+    )
+
+    staging = tempfile.mkdtemp(dir=_staging_directory())
+    archive_name = archive_builder.create_python_archive(staging, py_package)
+    local_archive_path = os.path.join(staging, archive_name)
+    deployed_archive_path = artifact_store.deploy_resource_archive(local_archive_path)
+
+    cache_image_path = singularity_builder.build_singularity_image_from_docker_daemon(
+        singularity_image
+    )
+    deploy_container_path = artifact_store.singularity_image_path(
+        os.path.basename(cache_image_path)
+    )
+    artifact_store.deploy_singularity_container(cached_singularity_image)
+
+    entrypoint_cmd = archive_builder.ENTRYPOINT_SCRIPT
+    executable = cluster_executables.Command(
+        py_package.name,
+        entrypoint_command=entrypoint_cmd,
+        resource_uri=deployed_archive_path,
+        args=packageable.args,
+        env_vars=packageable.env_vars,
+    )
+
+    executable.singularity_image = deploy_container_path
+    return executable
+
+
 def _package_singularity_container(
     container: cluster_executable_specs.SingularityContainer,
     packageable: xm.Packageable,
@@ -131,6 +274,8 @@ def _throw_on_unknown_executable(
 _PACKAGING_ROUTER = pattern_matching.match(
     _package_python_package,
     _package_universal_package,
+    _package_pdm_project,
+    _package_python_container,
     _package_singularity_container,
     _package_docker_container,
     _throw_on_unknown_executable,

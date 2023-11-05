@@ -1,0 +1,15 @@
+[project]
+name = "pdm_project"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Yicheng Luo", email = "ethanluoyc@gmail.com"},
+]
+dependencies = []
+requires-python = ">=3.10"
+readme = "README.md"
+license = {text = "MIT"}
+
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
