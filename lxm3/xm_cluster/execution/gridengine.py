@@ -101,22 +101,22 @@ class GridEngineClient(job_script.JobClient):
     def __init__(
         self,
         settings: Optional[config_lib.ClusterSettings] = None,
-        artifact: Optional[artifacts.Artifact] = None,
+        artifact_store: Optional[artifacts.ArtifactStore] = None,
     ) -> None:
         if settings is None:
             settings = config_lib.default().cluster_settings()
         self._settings = settings
 
-        if artifact is None:
+        if artifact_store is None:
             project = config_lib.default().project()
-            artifact = artifacts.create_artifact_store(
+            artifact_store = artifacts.create_artifact_store(
                 settings.storage_root,
                 hostname=settings.hostname,
                 user=settings.user,
                 project=project,
                 connect_kwargs=settings.ssh_config,
             )
-        self._artifact = artifact
+        self._artifact_store = artifact_store
 
         self._cluster = gridengine.GridEngineCluster(
             self._settings.hostname, self._settings.user

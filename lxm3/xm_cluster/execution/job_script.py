@@ -401,7 +401,7 @@ class JobScriptBuilder(abc.ABC):
 
 
 class JobClient(abc.ABC):
-    _artifact: artifacts.Artifact
+    _artifact_store: artifacts.ArtifactStore
     _settings: config_lib.ExecutionSettings
     builder_cls: Callable[[config_lib.ExecutionSettings], JobScriptBuilder]
 
@@ -410,11 +410,11 @@ class JobClient(abc.ABC):
         raise NotImplementedError
 
     def launch(self, job_name: str, job: ClusterJob):
-        job_script_dir = self._artifact.job_path(job_name)
+        job_script_dir = self._artifact_store.job_path(job_name)
         job_script_builder = self.builder_cls(self._settings)
         job_script_content = job_script_builder.build(job, job_name, job_script_dir)
 
-        self._artifact.deploy_job_scripts(job_name, job_script_content)
+        self._artifact_store.deploy_job_scripts(job_name, job_script_content)
         job_script_path = os.path.join(job_script_dir, JOB_SCRIPT_NAME)
 
         if isinstance(job, array_job.ArrayJob):
@@ -428,6 +428,6 @@ class JobClient(abc.ABC):
         return handles
 
     def _save_job_id(self, job_script_path: str, job_id: str):
-        self._artifact._fs.write_text(
+        self._artifact_store._fs.write_text(
             os.path.join(os.path.dirname(job_script_path), "job_id"), f"{job_id}\n"
         )

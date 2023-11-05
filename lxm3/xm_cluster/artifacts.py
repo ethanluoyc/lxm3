@@ -15,7 +15,7 @@ from lxm3.xm_cluster.console import console
 logging.getLogger("paramiko").setLevel(logging.WARNING)
 
 
-class Artifact(abc.ABC):
+class ArtifactStore(abc.ABC):
     def __init__(
         self,
         filesystem: fsspec.AbstractFileSystem,
@@ -111,7 +111,7 @@ class Artifact(abc.ABC):
         return deploy_archive_path
 
 
-class LocalArtifact(Artifact):
+class LocalArtifactStore(ArtifactStore):
     def __init__(self, staging_directory: str, project=None):
         staging_directory = os.path.abspath(os.path.expanduser(staging_directory))
         super().__init__(fsspec.filesystem("file"), staging_directory, project)
@@ -137,7 +137,7 @@ class LocalArtifact(Artifact):
         return deploy_container_path
 
 
-class RemoteArtifact(Artifact):
+class RemoteArtifactStore(ArtifactStore):
     _fs: SFTPFileSystem
 
     def __init__(
@@ -201,14 +201,10 @@ def create_artifact_store(
     user: Optional[str] = None,
     project: Optional[str] = None,
     connect_kwargs=None,
-):
+) -> ArtifactStore:
     if hostname is None:
-        return LocalArtifact(storage_root, project=project)
+        return LocalArtifactStore(storage_root, project=project)
     else:
-        return RemoteArtifact(
-            hostname,
-            user,
-            storage_root,
-            project=project,
-            connect_kwargs=connect_kwargs,
+        return RemoteArtifactStore(
+            hostname, user, storage_root, project=project, connect_kwargs=connect_kwargs
         )

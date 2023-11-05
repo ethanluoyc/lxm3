@@ -114,7 +114,7 @@ class LocalExecutionTest(parameterized.TestCase):
         )
         executor = executors.Local()
         job = xm.Job(executable, executor, name="test")
-        artifact = artifacts.LocalArtifact(deploy_dir.full_path)
+        artifact = artifacts.LocalArtifactStore(deploy_dir.full_path)
         settings = config.LocalSettings()
         client = local.LocalClient(settings, artifact)
         with mock.patch.object(subprocess, "run"):
@@ -378,7 +378,7 @@ class GridEngineExecutionTest(parameterized.TestCase):
         )
         executor = executors.GridEngine()
         job = xm.Job(executable, executor, name="test")
-        artifact = artifacts.LocalArtifact(deploy_dir.full_path)
+        artifact = artifacts.LocalArtifactStore(deploy_dir.full_path)
         settings = config.ClusterSettings()
         client = gridengine.GridEngineClient(settings, artifact)
         with mock.patch.object(
@@ -444,7 +444,7 @@ class SlurmExecutionTest(parameterized.TestCase):
         )
         executor = executors.Slurm()
         job = xm.Job(executable, executor, name="test")
-        artifact = artifacts.LocalArtifact(deploy_dir.full_path)
+        artifact = artifacts.LocalArtifactStore(deploy_dir.full_path)
         settings = config.ClusterSettings()
         client = slurm.SlurmClient(settings, artifact)
         with mock.patch.object(slurm_cluster.SlurmCluster, "launch") as mock_launch:

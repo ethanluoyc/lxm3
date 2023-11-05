@@ -105,20 +105,20 @@ class LocalClient(job_script.JobClient):
     def __init__(
         self,
         settings: Optional[config_lib.LocalSettings] = None,
-        artifact: Optional[artifacts.LocalArtifact] = None,
+        artifact_store: Optional[artifacts.LocalArtifactStore] = None,
     ) -> None:
         if settings is None:
             config = config_lib.default()
             settings = config.local_settings()
         self._settings = settings
 
-        if artifact is None:
+        if artifact_store is None:
             config = config_lib.default()
-            artifact = artifacts.LocalArtifact(
+            artifact_store = artifacts.LocalArtifactStore(
                 self._settings.storage_root, project=config.project()
             )
 
-        self._artifact = artifact
+        self._artifact_store = artifact_store
 
     def _launch(self, job_script_path, num_jobs):
         console.print(f"Launching {num_jobs} jobs locally...")
