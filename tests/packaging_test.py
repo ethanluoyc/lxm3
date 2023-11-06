@@ -2,35 +2,39 @@ import os
 import unittest.mock
 import zipfile
 
-import fsspec
 from absl.testing import absltest
 from absl.testing import parameterized
 
 from lxm3 import xm
 from lxm3 import xm_cluster
 from lxm3.xm_cluster import artifacts
-from lxm3.xm_cluster import packaging
+from lxm3.xm_cluster.packaging import cluster
 
 _HERE = os.path.abspath(os.path.dirname(__file__))
 
 
 class PackagingTest(parameterized.TestCase):
-    @unittest.mock.patch("subprocess.run")
-    def test_package_python(self, mock_run):
+    @parameterized.parameters(
+        (cluster._package_python_package,),
+    )
+    def test_package_python(self, pkg_fun):
         spec = xm_cluster.PythonPackage(
             entrypoint=xm_cluster.ModuleName("py_package.main"),
             path=os.path.join(_HERE, "testdata/test_pkg"),
         )
-        store = artifacts.ArtifactStore(fsspec.filesystem("memory"), "/tmp", "test")
-        executable = packaging._package_python_package(
-            spec,
-            xm.Packageable(
+
+        with unittest.mock.patch("subprocess.run"):
+            tmpdir = self.create_tempdir().full_path
+            store = artifacts.LocalArtifactStore(tmpdir, "test")
+            executable = pkg_fun(
                 spec,
-                xm_cluster.Local().Spec(),
-            ),
-            store,
-        )
-        self.assertIsInstance(executable, xm_cluster.Command)
+                xm.Packageable(
+                    spec,
+                    xm_cluster.Local().Spec(),
+                ),
+                store,
+            )
+            self.assertIsInstance(executable, xm_cluster.Command)
 
     def test_package_default_pip_args(self):
         spec = xm_cluster.PythonPackage(
@@ -42,14 +46,18 @@ class PackagingTest(parameterized.TestCase):
             sorted(["--no-deps", "--no-compile"]),
         )
 
-    def test_package_universal(self):
+    @parameterized.parameters(
+        (cluster._package_universal_package,),
+    )
+    def test_package_universal(self, pkg_fun):
         spec = xm_cluster.UniversalPackage(
             entrypoint=["python3", "main.py"],
             path=os.path.join(_HERE, "testdata/test_universal"),
             build_script="build.sh",
         )
-        store = artifacts.ArtifactStore(fsspec.filesystem("memory"), "/", "test")
-        executable = packaging._package_universal_package(
+        tmpdir = self.create_tempdir().full_path
+        store = artifacts.LocalArtifactStore(tmpdir, "test")
+        executable = pkg_fun(
             spec,
             xm.Packageable(
                 spec,
