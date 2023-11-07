@@ -10,8 +10,11 @@ env:
 
 jobs:
   deployment:
-    environment: publish
+    environment: pypi-publish
     runs-on: ubuntu-latest
+    permissions:
+      # IMPORTANT: this permission is mandatory for trusted publishing
+      id-token: write
     steps:
     - uses: actions/checkout@v3
     - name: Check prerelease
