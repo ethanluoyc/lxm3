@@ -38,6 +38,9 @@ jobs:
       with:
         cache: true
 
+    - name: Install dependencies
+      run: pdm install
+
     - if: matrix.python-version == '3.10' && runner.os == 'Linux'
       name: Lint
       run: pdm run lint
