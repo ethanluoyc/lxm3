@@ -1,13 +1,13 @@
 [build-system]
-requires = ["hatchling", "hatch-vcs"]
-build-backend = "hatchling.build"
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
 
 [project]
 name = "lxm3"
 description = 'LXM3: XManager launch backend for HPC clusters'
 readme = "README.md"
 requires-python = ">=3.9"
-license = "MIT"
+license = {text = "MIT"}
 keywords = ["machine-learning", "hpc", "packaging", "singularity"]
 authors = [{ name = "Yicheng Luo", email = "ethanluoyc@gmail.com" }]
 classifiers = [
@@ -47,14 +47,9 @@ lxm3 = "lxm3.cli.cli:entrypoint"
 
 [project.optional-dependencies]
 shell = ["IPython"]
-docker = ["docker"]
 
-
-[tool.hatch.envs.default]
-features = [
-  "shell"
-]
-dependencies = [
+[tool.pdm.dev-dependencies]
+dev = [
   "coverage[toml]>=6.5",
   "pytest",
   "pytest-cov",
@@ -62,53 +57,29 @@ dependencies = [
   "fabric",
   "Sphinx",
   "myst-parser",
-  "sphinx_nameko_theme"
-]
-
-[tool.hatch.version]
-source = "vcs"
-
-[tool.hatch.build]
-exclude = [
-  "tests",
-  "*_test.py",
-]
-
-[tool.hatch.envs.default.scripts]
-test = "pytest {args:lxm3 tests}"
-test-cov = "pytest --cov=lxm3 --cov-report=xml tests"
-cov = [
-  "test-cov",
-  "coverage report"
-]
-docs = "sphinx-build -b html docs docs/build/html -j auto"
-
-[[tool.hatch.envs.all.matrix]]
-python = ["3.9", "3.10", "3.11"]
-
-[tool.hatch.envs.lint]
-detached = true
-dependencies = [
+  "sphinx_nameko_theme",
   "black>=23.1.0",
   "ruff>=0.0.243",
 ]
-[tool.hatch.envs.lint.scripts]
-style = [
-  "ruff {args:.}",
-  "black --check --diff {args:.}",
-]
-fmt = [
-  "black {args:.}",
-  "ruff --fix {args:.}",
-  "style",
-]
-all = [
-  "style",
-]
+
+[tool.pdm.version]
+source = "scm"
+
+[tool.pdm.build]
+source-includes = ["tests"]
+excludes = ["*_test.py"]
+
+[tool.pdm.scripts]
+test = "pytest lxm3 tests"
+test-cov = "pytest --cov=lxm3 --cov-report=xml tests"
+cov = {composite = ["test-cov", "coverage report"]}
+docs = "sphinx-build -b html docs docs/build/html -j auto"
+lint.shell = "ruff . && black --check --diff ."
+fmt.shell = "black . && ruff --fix ."
 
 [tool.black]
 line-length = 88
-target-version = ['py39', 'py310']
+target-version = ['py310']
 include = '\.pyi?$'
 exclude = '''
 /(
