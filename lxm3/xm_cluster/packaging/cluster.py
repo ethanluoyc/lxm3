@@ -109,6 +109,7 @@ def _package_singularity_container(
         deploy_container_path = artifact_store.singularity_image_path(
             os.path.basename(singularity_image)
         )
+        artifact_store.deploy_singularity_container(singularity_image)
     elif transport == "docker-daemon":
         # Try building singularity image using cache
         cache_image_path = container_builder.build_singularity_image_from_docker_daemon(
