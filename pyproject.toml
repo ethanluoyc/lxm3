@@ -51,16 +51,17 @@ shell = ["IPython"]
 
 [tool.pdm.dev-dependencies]
 dev = [
-  "coverage[toml]>=6.5",
-  "pytest",
-  "pytest-cov",
-  "pre-commit",
-  "fabric",
-  "Sphinx",
-  "myst-parser",
-  "sphinx_nameko_theme",
-  "black>=23.1.0",
-  "ruff>=0.0.243",
+    "coverage[toml]>=6.5",
+    "pytest",
+    "pytest-cov",
+    "pre-commit",
+    "fabric",
+    "Sphinx",
+    "myst-parser",
+    "sphinx_nameko_theme",
+    "black>=23.1.0",
+    "ruff>=0.0.243",
+    "sphinx-autobuild>=2021.3.14",
 ]
 
 [tool.pdm.version]
