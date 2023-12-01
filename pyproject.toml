@@ -34,7 +34,8 @@ dependencies = [
   "immutabledict",
   "rich",
   "vcsinfo",
-  "docker"
+  "docker",
+  "pip"
 ]
 
 [project.urls]
