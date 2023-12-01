@@ -51,6 +51,7 @@ and run the command
 
    getting_started
    configuration
+   faq
    tips_and_tricks
    api
 
