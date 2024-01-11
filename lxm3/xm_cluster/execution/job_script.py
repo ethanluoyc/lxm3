@@ -1,5 +1,6 @@
 import abc
 import os
+import re
 from typing import (
     Any,
     Callable,
@@ -410,6 +411,7 @@ class JobClient(abc.ABC):
         raise NotImplementedError
 
     def launch(self, job_name: str, job: ClusterJob):
+        job_name = re.sub("\\W", "_", job_name)
         job_script_dir = self._artifact_store.job_path(job_name)
         job_script_builder = self.builder_cls(self._settings)
         job_script_content = job_script_builder.build(job, job_name, job_script_dir)

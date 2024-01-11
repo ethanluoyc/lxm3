@@ -1,5 +1,4 @@
 import asyncio
-import datetime
 import functools
 import subprocess
 import time
@@ -30,12 +29,15 @@ class _LaunchResult:
         self.non_local_handles = non_local_handles
 
 
-async def _launch(job: Union[xm.JobGroup, array_job_lib.ArrayJob]):
+async def _launch(
+    experiment_title: str,
+    work_unit_name: str,
+    job: Union[xm.JobGroup, array_job_lib.ArrayJob],
+):
     local_handles = []
     non_local_handles = []
 
-    version = datetime.datetime.now().strftime("%Y%m%d.%H%M%S")
-    job_name = f"job-{version}"
+    job_name = f"{experiment_title}_{work_unit_name}"
 
     local_handles.extend(await local_execution.launch(job_name, job))  # type: ignore
     non_local_handles.extend(await slurm_execution.launch(job_name, job))  # type: ignore
@@ -88,7 +90,9 @@ class ClusterWorkUnit(xm.WorkUnit):
     async def _submit_job_for_execution(
         self, job: Union[xm.JobGroup, array_job_lib.ArrayJob], args
     ):
-        launch_result = await _launch(job)
+        launch_result = await _launch(
+            self.experiment._experiment_title, self.experiment_unit_name, job
+        )
         self._ingest_handles(launch_result)
 
     def _ingest_handles(self, launch_result):
