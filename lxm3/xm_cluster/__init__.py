@@ -16,5 +16,6 @@ from lxm3.xm_cluster.executors import Local
 from lxm3.xm_cluster.executors import SingularityOptions
 from lxm3.xm_cluster.executors import Slurm
 from lxm3.xm_cluster.experiment import ClusterExperiment
+from lxm3.xm_cluster.experiment import ClusterWorkUnit
 from lxm3.xm_cluster.experiment import create_experiment
 from lxm3.xm_cluster.requirements import JobRequirements
