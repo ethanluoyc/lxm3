@@ -46,6 +46,18 @@ export FOO"""
     def test_empty_env_vars(self):
         self.assertEqual(job_script._create_env_vars([{}]), "")
 
+    def test_common_values(self):
+        env_var_str = job_script._create_env_vars(
+            [{"FOO": "BAR", "BAR": "1"}, {"FOO": "BAR", "BAR": "2"}]
+        )
+        expected = """\
+export FOO="BAR"
+BAR_0="1"
+BAR_1="2"
+BAR=$(eval echo \\$"BAR_$LXM_TASK_ID")
+export BAR"""
+        self.assertEqual(env_var_str, expected)
+
     def test_different_keys(self):
         with self.assertRaises(ValueError):
             job_script._create_env_vars([{"FOO": "BAR1"}, {"BAR": "BAR2"}])

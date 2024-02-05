@@ -1,4 +1,5 @@
 import abc
+import collections
 import os
 import re
 from typing import (
@@ -214,10 +215,30 @@ def _create_env_vars(env_vars_list: List[Dict[str, str]]) -> str:
     first_keys = set(env_vars_list[0].keys())
     if not first_keys:
         return ""
+
+    # Find out keys that are common to all environment variables
+    var_to_values = collections.defaultdict(list)
+    for env in env_vars_list:
+        for k, v in env.items():
+            var_to_values[k].append(v)
+
+    common_keys = []
+    for k, v in var_to_values.items():
+        if len(set(v)) == 1:
+            common_keys.append(k)
+    common_keys = sorted(common_keys)
+
     for env_vars in env_vars_list:
         if first_keys != set(env_vars.keys()):
             raise ValueError("Expect all environment variables to have the same keys")
+
+    # Generate shared environment variables
+    for k in sorted(common_keys):
+        lines.append('export {key}="{value}"'.format(key=k, value=env_vars_list[0][k]))
+
     for key in first_keys:
+        if key in common_keys:
+            continue
         for task_id, env_vars in enumerate(env_vars_list):
             lines.append(
                 '{key}_{task_id}="{value}"'.format(
