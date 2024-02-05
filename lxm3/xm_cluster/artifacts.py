@@ -38,6 +38,9 @@ class ArtifactStore(abc.ABC):
     def job_script_path(self, job_name: str):
         return os.path.join(self.job_path(job_name), "job.sh")
 
+    def job_log_path(self, job_name: str):
+        return os.path.join(os.path.join(self._storage_root, "logs", job_name))
+
     def singularity_image_path(self, image_name: str):
         return os.path.join(self._storage_root, "containers", image_name)
 
@@ -80,7 +83,7 @@ class ArtifactStore(abc.ABC):
 
     def deploy_job_scripts(self, job_name, job_script):
         job_path = self.job_path(job_name)
-        job_log_path = os.path.join(job_path, "logs")
+        job_log_path = self.job_log_path(job_name)
 
         self._fs.makedirs(job_path, exist_ok=True)
         self._fs.makedirs(job_log_path, exist_ok=True)

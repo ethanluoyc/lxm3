@@ -305,7 +305,7 @@ class JobScriptBuilder(abc.ABC):
         cls,
         executor: xm.Executor,
         num_array_tasks: Optional[int],
-        job_script_dir: str,
+        job_log_dir: str,
         job_name: str,
     ) -> str:
         """Create a job header"""
@@ -408,7 +408,7 @@ class JobScriptBuilder(abc.ABC):
         self,
         job: Union[xm.Job, array_job.ArrayJob],
         job_name: str,
-        job_script_dir: str,
+        job_log_dir: str,
     ) -> str:
         setup = self._create_setup_cmds(job.executable, job.executor)
 
@@ -416,7 +416,7 @@ class JobScriptBuilder(abc.ABC):
         if isinstance(job, array_job.ArrayJob) and len(job.args) > 1:
             num_array_tasks = len(job.args)
         header = self._create_job_header(
-            job.executor, num_array_tasks, job_script_dir, job_name
+            job.executor, num_array_tasks, job_log_dir, job_name
         )
 
         return self._create_job_script(job=job, setup=setup, header=header)
@@ -434,8 +434,9 @@ class JobClient(abc.ABC):
     def launch(self, job_name: str, job: ClusterJob):
         job_name = re.sub("\\W", "_", job_name)
         job_script_dir = self._artifact_store.job_path(job_name)
+        job_log_dir = self._artifact_store.job_log_path(job_name)
         job_script_builder = self.builder_cls(self._settings)
-        job_script_content = job_script_builder.build(job, job_name, job_script_dir)
+        job_script_content = job_script_builder.build(job, job_name, job_log_dir)
 
         self._artifact_store.deploy_job_scripts(job_name, job_script_content)
         job_script_path = os.path.join(job_script_dir, JOB_SCRIPT_NAME)

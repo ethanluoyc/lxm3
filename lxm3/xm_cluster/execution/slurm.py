@@ -47,12 +47,12 @@ class SlurmJobScriptBuilder(job_script.JobScriptBuilder):
         cls,
         executor: executors.Slurm,
         num_array_tasks: Optional[int],
-        job_script_dir: str,
+        job_log_dir: str,
         job_name: str,
     ) -> str:
         num_array_tasks = None
         job_header = header_from_executor(
-            job_name, executor, num_array_tasks, job_script_dir
+            job_name, executor, num_array_tasks, job_log_dir
         )
         return job_header
 
@@ -172,7 +172,7 @@ def header_from_executor(
     job_name: str,
     executor: executors.Slurm,
     num_array_tasks: Optional[int],
-    job_script_dir: str,
+    job_log_dir: str,
 ) -> str:
     header = []
 
@@ -188,7 +188,7 @@ def header_from_executor(
         duration = executor.walltime
         header.append(f"#SBATCH --time={_format_slurm_time(duration)}")
 
-    log_directory = executor.log_directory or os.path.join(job_script_dir, "logs")
+    log_directory = executor.log_directory or job_log_dir
     if num_array_tasks is not None:
         stdout = os.path.join(log_directory, "slurm-%A_%a.out")
     else:

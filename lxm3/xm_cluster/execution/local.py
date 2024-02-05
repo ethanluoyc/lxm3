@@ -62,10 +62,10 @@ class LocalJobScriptBuilder(job_script.JobScriptBuilder):
         cls,
         executor: executors.GridEngine,
         num_array_tasks: Optional[int],
-        job_script_dir: str,
+        job_log_dir: str,
         job_name: str,
     ) -> str:
-        del executor, num_array_tasks, job_script_dir, job_name
+        del executor, num_array_tasks, job_log_dir, job_name
         return ""
 
     def build(
