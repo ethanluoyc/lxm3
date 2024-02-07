@@ -2,6 +2,7 @@ import abc
 import collections
 import os
 import re
+import shlex
 from typing import (
     Any,
     Callable,
@@ -23,67 +24,10 @@ from lxm3.xm_cluster import config as config_lib
 from lxm3.xm_cluster import executables
 from lxm3.xm_cluster import executors
 
-ARRAY_WRAPPER_NAME = "array_wrapper.sh"
 JOB_SCRIPT_NAME = "job.sh"
+CONTAINER_WORKDIR = "/run/task"
 
 ClusterJob = Union[xm.Job, array_job.ArrayJob]
-
-_JOB_SCRIPT_TEMPLATE = """\
-%(shebang)s
-%(header)s
-%(setup)s
-set -e
-TASK_OFFSET=%(task_offset)s
-TASK_INDEX_NAME="%(task_index_name)s"
-NUM_TASKS="%(num_tasks)s"
-
-if [ $NUM_TASKS -eq 1 ]; then
-    # If there is only one task, then we don't need to use the task index
-    LXM_TASK_ID=0
-else
-    LXM_TASK_ID=$(($(eval echo \\$"TASK_INDEX_NAME") - $TASK_OFFSET))
-fi
-
-export LXM_TASK_ID
-
-LXM_WORKDIR=$(mktemp -d -t lxm-XXXXXX)
-mkdir -p $LXM_WORKDIR
-# Extract archives
-ARCHIVES="%(archives)s"
-for ar in $ARCHIVES; do
-    case $ar in
-    *.zip)
-        unzip -q -d $LXM_WORKDIR $ar
-        ;;
-    *.tar)
-        tar -C $LXM_WORKDIR -xf $ar
-        ;;
-    *.tar.gz|*.tgz)
-        tar -C $LXM_WORKDIR -xzf $ar
-        ;;
-    *)
-        _error "Unsupported archive format: $ar"
-        ;;
-    esac
-done
-cat <<'EOF' >$LXM_WORKDIR/job-env.sh
-%(job_env)s
-EOF
-cat <<'EOF' >$LXM_WORKDIR/job-args.sh
-%(job_args)s
-EOF
-chmod +x $LXM_WORKDIR/job-env.sh
-chmod +x $LXM_WORKDIR/job-args.sh
-
-cleanup() {
-  echo >& 2 "DEBUG[$(basename $0)] Cleaning up $LXM_WORKDIR"
-  rm -rf $LXM_WORKDIR
-}
-trap cleanup EXIT
-
-cd $LXM_WORKDIR
-%(entrypoint)s
-"""
 
 
 class _WorkItem(TypedDict):
@@ -94,204 +38,55 @@ class _WorkItem(TypedDict):
 ExecutorClsType = TypeVar("ExecutorClsType")
 
 
-def create_host_entrypoint(cmd: str) -> str:
-    return """
-CMD_ARGS=$(${LXM_WORKDIR}/job-args.sh)
-sh -c ". $LXM_WORKDIR/job-env.sh; eval %(cmd)s ${CMD_ARGS}"
-""" % {
-        "cmd": cmd
-    }
-
-
-def _get_singularity_options(
-    options: executors.SingularityOptions,
+def create_singularity_entrypoint(
+    cmd: List[str],
+    singularity_image: str,
+    singularity_options: executors.SingularityOptions,
     use_gpu: bool,
-) -> List[str]:
+) -> str:
     opts = []
-    if options.bind is not None:
-        for host, container in options.bind.items():
+
+    if singularity_options.bind is not None:
+        for host, container in singularity_options.bind.items():
             opts.extend(["--bind", f"{host}:{container}"])
 
-    opts.extend(list(options.extra_options))
+    opts.extend(list(singularity_options.extra_options))
 
     if use_gpu:
         opts.append("--nv")
 
-    return opts
+    return " ".join(["singularity", "exec", *opts, singularity_image, *cmd])
 
 
-def create_singularity_entrypoint(
-    cmd: str,
-    singularity_image: str,
-    singularity_options,
+def create_docker_entrypoint(
+    cmd: List[str],
+    docker_image: str,
+    docker_options: executors.DockerOptions,
     use_gpu: bool,
-    extra_options=None,
 ) -> str:
-    extra_options = extra_options or []
-    options = singularity_options or executors.SingularityOptions()
-    opts = _get_singularity_options(options, use_gpu)
-    opts.extend(extra_options)
-
-    return """\
-singularity exec \
---bind="$LXM_WORKDIR/job-env.sh:/etc/job-env.sh:ro" \
---bind="$LXM_WORKDIR/job-args.sh:/etc/job-args.sh:ro" \
---bind="$LXM_WORKDIR:/mnt/lxm3" \
---pwd="/mnt/lxm3" \
---env="LXM_TASK_ID=$LXM_TASK_ID" \
-%(singularity_opts)s \
-%(singularity_image)s \
-sh -c '. /etc/job-env.sh; eval %(cmd)s $(/etc/job-args.sh)'""" % {
-        "singularity_image": singularity_image,
-        "singularity_opts": " ".join(opts),
-        "cmd": cmd,
-    }
-
-
-def _get_docker_options(
-    options: executors.DockerOptions,
-    use_gpu: bool,
-) -> List[str]:
     opts = ["--rm"]
-    if options.volumes is not None:
-        for host, container in options.volumes.items():
+    if docker_options.volumes is not None:
+        for host, container in docker_options.volumes.items():
             opts.extend(["--mount", f"type=bind,source={host},target={container}"])
-    opts.extend(list(options.extra_options))
+    opts.extend(list(docker_options.extra_options))
 
     if use_gpu:
         opts.extend(
             [
                 "--runtime=nvidia",
-                "-e",
+                "--env",
                 '"NVIDIA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-all}"',
             ]
         )
 
-    return opts
-
-
-def create_docker_entrypoint(
-    cmd: str,
-    docker_image: str,
-    docker_options: executors.DockerOptions,
-    use_gpu: bool,
-) -> str:
-    opts = _get_docker_options(docker_options, use_gpu)
-    return """\
-docker run \
---mount="type=bind,source=$LXM_WORKDIR/job-env.sh,target=/etc/job-env.sh,readonly" \
---mount="type=bind,source=$LXM_WORKDIR/job-args.sh,target=/etc/job-args.sh,readonly" \
---mount="type=bind,source=$LXM_WORKDIR,target=/mnt/lxm3" \
---workdir="/mnt/lxm3" \
---env="LXM_TASK_ID=$LXM_TASK_ID" \
-%(docker_opts)s \
-%(docker_image)s \
-sh -c '. /etc/job-env.sh; eval %(cmd)s $(/etc/job-args.sh)'""" % {
-        "docker_image": docker_image,
-        "docker_opts": " ".join(opts),
-        "cmd": cmd,
-    }
-
-
-def _get_additional_env(env_vars, parent_env):
-    env = {}
-    for k, v in parent_env.items():
-        if k not in env_vars:
-            env[k] = v
-    return env
-
-
-def _get_additional_binds(bind, singularity_additional_binds):
-    updates = {}
-    for src, dst in singularity_additional_binds.items():
-        if dst not in bind.values():
-            updates[src] = dst
-    return updates
-
-
-def _create_env_vars(env_vars_list: List[Dict[str, str]]) -> str:
-    """Create the env_vars list."""
-    lines = []
-    first_keys = set(env_vars_list[0].keys())
-    if not first_keys:
-        return ""
-
-    # Find out keys that are common to all environment variables
-    var_to_values = collections.defaultdict(list)
-    for env in env_vars_list:
-        for k, v in env.items():
-            var_to_values[k].append(v)
-
-    common_keys = []
-    for k, v in var_to_values.items():
-        if len(set(v)) == 1:
-            common_keys.append(k)
-    common_keys = sorted(common_keys)
-
-    for env_vars in env_vars_list:
-        if first_keys != set(env_vars.keys()):
-            raise ValueError("Expect all environment variables to have the same keys")
-
-    # Generate shared environment variables
-    for k in sorted(common_keys):
-        lines.append('export {key}="{value}"'.format(key=k, value=env_vars_list[0][k]))
-
-    for key in first_keys:
-        if key in common_keys:
-            continue
-        for task_id, env_vars in enumerate(env_vars_list):
-            lines.append(
-                '{key}_{task_id}="{value}"'.format(
-                    key=key, task_id=task_id, value=env_vars[key]
-                )
-            )
-        lines.append('{key}=$(eval echo \\$"{key}_$LXM_TASK_ID")'.format(key=key))
-        lines.append("export {key}".format(key=key))
-    content = "\n".join(lines)
-    return content
-
-
-def _create_args(args_list: List[List[str]]) -> str:
-    """Create the args list."""
-    if not args_list:
-        return ":;"
-    lines = []
-    for task_id, args in enumerate(args_list):
-        args_str = " ".join([a for a in args])
-        lines.append(
-            'TASK_CMD_ARGS_{task_id}="{args_str}"'.format(
-                task_id=task_id, args_str=args_str
-            )
-        )
-    lines.append('TASK_CMD_ARGS=$(eval echo \\$"TASK_CMD_ARGS_$LXM_TASK_ID")')
-    lines.append("echo $TASK_CMD_ARGS")
-    content = "\n".join(lines)
-    return content
-
-
-def _create_work_list(job: Union[xm.Job, array_job.ArrayJob]) -> List[_WorkItem]:
-    work_list: List[_WorkItem] = []
-    executable = cast(executables.Command, job.executable)
-    if isinstance(job, array_job.ArrayJob):
-        jobs = array_job.flatten_array_job(job)
-    else:
-        jobs = [job]
-    for job in jobs:
-        work_list.append(
-            {
-                "args": job_blocks.merge_args(executable.args, job.args).to_list(
-                    xm.utils.ARG_ESCAPER
-                ),
-                "env_vars": {**executable.env_vars, **job.env_vars},
-            }
-        )
-    return work_list
+    return " ".join(["docker", "run", *opts, docker_image, *cmd])
 
 
 class JobScriptBuilder(abc.ABC):
     TASK_OFFSET: int
     JOB_SCRIPT_SHEBANG: str = "#!/usr/bin/env bash"
     TASK_ID_VAR_NAME: str
+    JOB_ENV_PATTERN = None
 
     def __init__(
         self,
@@ -320,6 +115,132 @@ class JobScriptBuilder(abc.ABC):
     def _create_setup_cmds(cls, executable, executor) -> str:
         """Generate backend specific setup commands"""
 
+    @staticmethod
+    def _get_additional_env(env_vars, parent_env):
+        env = {}
+        for k, v in parent_env.items():
+            if k not in env_vars:
+                env[k] = v
+        return env
+
+    @staticmethod
+    def _get_additional_binds(bind, singularity_additional_binds):
+        updates = {}
+        for src, dst in singularity_additional_binds.items():
+            if dst not in bind.values():
+                updates[src] = dst
+        return updates
+
+    @staticmethod
+    def _create_env_vars(env_vars_list: List[Dict[str, str]]) -> str:
+        """Create the env_vars list."""
+        lines = []
+        first_keys = set(env_vars_list[0].keys())
+        if not first_keys:
+            return ""
+
+        # Find out keys that are common to all environment variables
+        var_to_values = collections.defaultdict(list)
+        for env in env_vars_list:
+            for k, v in env.items():
+                var_to_values[k].append(v)
+
+        common_keys = []
+        for k, v in var_to_values.items():
+            if len(set(v)) == 1:
+                common_keys.append(k)
+        common_keys = sorted(common_keys)
+
+        for env_vars in env_vars_list:
+            if first_keys != set(env_vars.keys()):
+                raise ValueError(
+                    "Expect all environment variables to have the same keys"
+                )
+
+        # Generate shared environment variables
+        for k in sorted(common_keys):
+            lines.append(
+                'export {key}="{value}"'.format(key=k, value=env_vars_list[0][k])
+            )
+
+        for key in first_keys:
+            if key in common_keys:
+                continue
+            for task_id, env_vars in enumerate(env_vars_list):
+                lines.append(
+                    '{key}_{task_id}="{value}"'.format(
+                        key=key, task_id=task_id, value=env_vars[key]
+                    )
+                )
+            lines.append('{key}=$(eval echo \\$"{key}_$LXM_TASK_ID")'.format(key=key))
+            lines.append("export {key}".format(key=key))
+        content = "\n".join(lines)
+        return content
+
+    @staticmethod
+    def _create_args(args_list: List[List[str]]) -> str:
+        """Create the args list."""
+        if not args_list:
+            return ""
+        lines = []
+        for task_id, args in enumerate(args_list):
+            args_str = " ".join([a for a in args])
+            lines.append(
+                'TASK_CMD_ARGS_{task_id}="{args_str}"'.format(
+                    task_id=task_id, args_str=args_str
+                )
+            )
+        lines.append('TASK_CMD_ARGS=$(eval echo \\$"TASK_CMD_ARGS_$LXM_TASK_ID")')
+        lines.append("eval set -- $TASK_CMD_ARGS")
+        content = "\n".join(lines)
+        return content
+
+    @staticmethod
+    def _create_work_list(job: Union[xm.Job, array_job.ArrayJob]) -> List[_WorkItem]:
+        work_list: List[_WorkItem] = []
+        executable = cast(executables.Command, job.executable)
+        if isinstance(job, array_job.ArrayJob):
+            jobs = array_job.flatten_array_job(job)
+        else:
+            jobs = [job]
+        for job in jobs:
+            work_list.append(
+                {
+                    "args": job_blocks.merge_args(executable.args, job.args).to_list(
+                        xm.utils.ARG_ESCAPER
+                    ),
+                    "env_vars": {**executable.env_vars, **job.env_vars},
+                }
+            )
+        return work_list
+
+    def _create_array_script(self, job) -> str:
+        executable = job.executable
+        singularity_image = executable.singularity_image
+
+        if self._settings is not None:
+            env_overrides = self._settings.env
+            singularity_env_overrides = self._settings.env
+        else:
+            env_overrides = {}
+            singularity_env_overrides = {}
+
+        work_list = self._create_work_list(job)
+        for work_item in work_list:
+            if singularity_image is not None:
+                work_item["env_vars"].update(
+                    self._get_additional_env(
+                        work_item["env_vars"], singularity_env_overrides
+                    )
+                )
+            work_item["env_vars"].update(
+                self._get_additional_env(work_item["env_vars"], env_overrides)
+            )
+        return f"""
+{self._create_env_vars([work["env_vars"] for work in work_list])}
+{self._create_args([work["args"] for work in work_list])}
+"""
+
     def _create_job_script(self, job: ClusterJob, setup: str, header: str) -> str:
         executable = job.executable
         if not isinstance(executable, executables.Command):
@@ -327,79 +248,140 @@ class JobScriptBuilder(abc.ABC):
         executor = cast(
             Union[executors.Local, executors.GridEngine, executors.Slurm], job.executor
         )
-        use_gpu = self._is_gpu_requested(executor)
+        num_tasks = len(job.args) if isinstance(job, array_job.ArrayJob) else 1
+        array_script = self._create_array_script(job)
 
-        if self._settings is not None:
-            env_overrides = self._settings.env
-            singularity_env_overrides = self._settings.env
-            singularity_additional_binds = self._settings.singularity.binds
-        else:
-            env_overrides = {}
-            singularity_env_overrides = {}
-            singularity_additional_binds = {}
+        def _rewrite_array_job_command(array_scrpt_path: str, cmd: str):
+            return ["sh", "-c", shlex.quote(f'. {array_scrpt_path}; {cmd} "$@"')]
 
-        singularity_image = executable.singularity_image
-        singularity_options = executor.singularity_options
-        docker_image = executable.docker_image
-        docker_options = executor.docker_options
-        if singularity_image is not None:
-            if singularity_options is not None:
+        if executable.singularity_image is not None:
+            if executor.singularity_options is not None:
                 singularity_options = executors.SingularityOptions(
-                    bind={**singularity_options.bind},
-                    extra_options=[*singularity_options.extra_options],
+                    bind={**executor.singularity_options.bind},
+                    extra_options=[*executor.singularity_options.extra_options],
                 )
             else:
                 singularity_options = executors.SingularityOptions()
 
-            singularity_options.bind.update(
-                _get_additional_binds(
-                    singularity_options.bind, singularity_additional_binds
-                )
-            )
-        if docker_image is not None and docker_options is None:
-            docker_options = executors.DockerOptions()
-
-        if singularity_image is not None:
-            assert singularity_options is not None
-            entrypoint = create_singularity_entrypoint(
-                executable.entrypoint_command,
-                singularity_image,
-                singularity_options,
-                use_gpu,
-            )
-        elif docker_image is not None:
-            assert docker_options is not None
-            entrypoint = create_docker_entrypoint(
-                executable.entrypoint_command, docker_image, docker_options, use_gpu
-            )
-        else:
-            entrypoint = create_host_entrypoint(executable.entrypoint_command)
-
-        work_list = _create_work_list(job)
-        for work_item in work_list:
-            if singularity_image is not None:
-                work_item["env_vars"].update(
-                    _get_additional_env(
-                        work_item["env_vars"], singularity_env_overrides
+            if self._settings is not None:
+                singularity_options.bind.update(
+                    self._get_additional_binds(
+                        singularity_options.bind, self._settings.singularity.binds
                     )
                 )
-            work_item["env_vars"].update(
-                _get_additional_env(work_item["env_vars"], env_overrides)
+
+            singularity_options.extra_options = [
+                *singularity_options.extra_options,
+                f'--bind="$LXM_WORKDIR:{CONTAINER_WORKDIR}"',
+                f"--pwd={CONTAINER_WORKDIR}",
+                '--bind="$LXM_WORKDIR/job-param.sh:/etc/job-param.sh:ro"',
+                '--env=LXM_TASK_ID="$LXM_TASK_ID"',
+            ]
+
+            entrypoint = create_singularity_entrypoint(
+                _rewrite_array_job_command(
+                    "/etc/job-param.sh", executable.entrypoint_command
+                ),
+                executable.singularity_image,
+                singularity_options,
+                self._is_gpu_requested(executor),
+            )
+        elif executable.docker_image is not None:
+            if executor.docker_options is not None:
+                docker_options = executors.DockerOptions(
+                    volumes={**executor.docker_options.volumes},
+                    extra_options=[*executor.docker_options.extra_options],
+                )
+            else:
+                docker_options = executors.DockerOptions()
+
+            docker_options.extra_options = [
+                *docker_options.extra_options,
+                f'--mount="type=bind,source=$LXM_WORKDIR,target={CONTAINER_WORKDIR}"',
+                f"--workdir={CONTAINER_WORKDIR}",
+                '--mount="type=bind,source=$LXM_WORKDIR/job-param.sh,target=/etc/job-param.sh,readonly"',
+                '--env="LXM_TASK_ID=$LXM_TASK_ID"',
+            ]
+
+            entrypoint = create_docker_entrypoint(
+                _rewrite_array_job_command(
+                    "/etc/job-param.sh", executable.entrypoint_command
+                ),
+                executable.docker_image,
+                docker_options,
+                self._is_gpu_requested(executor),
+            )
+        else:
+            entrypoint = " ".join(
+                _rewrite_array_job_command(
+                    "./job-param.sh", executable.entrypoint_command
+                )
             )
 
-        job_env = _create_env_vars([work["env_vars"] for work in work_list])
-        job_args = _create_args([work["args"] for work in work_list])
+        cmds = """\
+TASK_OFFSET=%(task_offset)s
+TASK_INDEX_NAME="%(task_index_name)s"
+NUM_TASKS="%(num_tasks)s"
 
-        job_script_content = _JOB_SCRIPT_TEMPLATE % {
+if [ $NUM_TASKS -eq 1 ]; then
+    # If there is only one task, then we don't need to use the task index
+    LXM_TASK_ID=0
+else
+    LXM_TASK_ID=$(($(eval echo \\$"TASK_INDEX_NAME") - $TASK_OFFSET))
+fi
+export LXM_TASK_ID
+cat <<'EOF' > $LXM_WORKDIR/job-param.sh
+%(array_script)s
+EOF
+chmod +x $LXM_WORKDIR/job-param.sh
+%(entrypoint)s
+""" % {
+            "task_offset": self.TASK_OFFSET,
+            "task_index_name": self.TASK_ID_VAR_NAME,
+            "num_tasks": num_tasks,
+            "entrypoint": entrypoint,
+            "array_script": array_script,
+        }
+
+        job_script_content = """\
+%(shebang)s
+%(header)s
+%(setup)s
+set -e
+
+LXM_WORKDIR=$(mktemp -d -t lxm-XXXXXX)
+# Extract archives
+ARCHIVES="%(archives)s"
+for ar in $ARCHIVES; do
+    case $ar in
+    *.zip)
+        unzip -q -d $LXM_WORKDIR $ar
+        ;;
+    *.tar)
+        tar -C $LXM_WORKDIR -xf $ar
+        ;;
+    *.tar.gz|*.tgz)
+        tar -C $LXM_WORKDIR -xzf $ar
+        ;;
+    *)
+        _error "Unsupported archive format: $ar"
+        ;;
+    esac
+done
+cleanup() {
+  echo >& 2 "DEBUG[$(basename $0)] Cleaning up $LXM_WORKDIR"
+  rm -rf $LXM_WORKDIR
+}
+trap cleanup EXIT
+
+cd $LXM_WORKDIR
+
+%(entrypoint)s
+""" % {
             "shebang": self.JOB_SCRIPT_SHEBANG,
             "header": header,
             "setup": setup,
-            "job_env": job_env,
-            "job_args": job_args,
-            "task_offset": self.TASK_OFFSET,
-            "entrypoint": entrypoint,
-            "task_index_name": self.TASK_ID_VAR_NAME,
-            "num_tasks": len(work_list),
+            "entrypoint": cmds,
             "archives": " ".join([executable.resource_uri]),
         }
         return job_script_content

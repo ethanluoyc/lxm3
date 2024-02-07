@@ -35,7 +35,9 @@ def is_docker_installed():
 
 class JobScriptBuilderTest(parameterized.TestCase):
     def test_env_vars(self):
-        env_var_str = job_script._create_env_vars([{"FOO": "BAR1"}, {"FOO": "BAR2"}])
+        env_var_str = job_script.JobScriptBuilder._create_env_vars(
+            [{"FOO": "BAR1"}, {"FOO": "BAR2"}]
+        )
         expected = """\
 FOO_0="BAR1"
 FOO_1="BAR2"
@@ -44,10 +46,10 @@ export FOO"""
         self.assertEqual(env_var_str, expected)
 
     def test_empty_env_vars(self):
-        self.assertEqual(job_script._create_env_vars([{}]), "")
+        self.assertEqual(job_script.JobScriptBuilder._create_env_vars([{}]), "")
 
     def test_common_values(self):
-        env_var_str = job_script._create_env_vars(
+        env_var_str = job_script.JobScriptBuilder._create_env_vars(
             [{"FOO": "BAR", "BAR": "1"}, {"FOO": "BAR", "BAR": "2"}]
         )
         expected = """\
@@ -60,41 +62,47 @@ export BAR"""
 
     def test_different_keys(self):
         with self.assertRaises(ValueError):
-            job_script._create_env_vars([{"FOO": "BAR1"}, {"BAR": "BAR2"}])
+            job_script.JobScriptBuilder._create_env_vars(
+                [{"FOO": "BAR1"}, {"BAR": "BAR2"}]
+            )
 
     def test_args(self):
-        args_str = job_script._create_args(
+        args_str = job_script.JobScriptBuilder._create_args(
             [["--seed=1", "--task=1"], ["--seed=2", "--task=2"]]
         )
         expected = """\
 TASK_CMD_ARGS_0="--seed=1 --task=1"
 TASK_CMD_ARGS_1="--seed=2 --task=2"
 TASK_CMD_ARGS=$(eval echo \\$"TASK_CMD_ARGS_$LXM_TASK_ID")
-echo $TASK_CMD_ARGS"""
+eval set -- $TASK_CMD_ARGS"""
         self.assertEqual(args_str, expected)
 
     def test_empty_args(self):
-        self.assertEqual(job_script._create_args([]), ":;")
+        self.assertEqual(job_script.JobScriptBuilder._create_args([]), "")
         self.assertEqual(
-            job_script._create_args([[]]),
+            job_script.JobScriptBuilder._create_args([[]]),
             """\
 TASK_CMD_ARGS_0=""
 TASK_CMD_ARGS=$(eval echo \\$"TASK_CMD_ARGS_$LXM_TASK_ID")
-echo $TASK_CMD_ARGS""",
+eval set -- $TASK_CMD_ARGS""",
         )
 
     def test_get_additional_env(self):
         job_env = {"FOO": "FOO_0", "OVERRIDE": "OVERRIDE"}
 
         self.assertEqual(
-            job_script._get_additional_env(job_env, {"FOO": "FOO_HOST", "BAR": "BAR"}),
+            job_script.JobScriptBuilder._get_additional_env(
+                job_env, {"FOO": "FOO_HOST", "BAR": "BAR"}
+            ),
             {"BAR": "BAR"},
         )
 
     def test_additional_bindings(self):
         job_binds = {"/c": "/b", "/d": "/e"}
         overrides = {"/a": "/b", "/foo": "/bar"}
-        additional_binds = job_script._get_additional_binds(job_binds, overrides)
+        additional_binds = job_script.JobScriptBuilder._get_additional_binds(
+            job_binds, overrides
+        )
         self.assertEqual(additional_binds, {"/foo": "/bar"})
 
 

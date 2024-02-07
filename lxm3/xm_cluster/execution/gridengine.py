@@ -20,6 +20,7 @@ class GridEngineJobScriptBuilder(job_script.JobScriptBuilder):
     TASK_OFFSET = 1
     JOB_SCRIPT_SHEBANG = "#!/usr/bin/env bash"
     TASK_ID_VAR_NAME = "SGE_TASK_ID"
+    JOB_ENV_PATTERN = "^(JOB_|SGE_|PE|NSLOTS|NHOSTS)"
 
     executable_cls = executables.Command
     executor_cls = executors.GridEngine

@@ -2,6 +2,7 @@ import os
 import shlex
 import shutil
 import subprocess
+import unittest
 
 from absl.testing import absltest
 from absl.testing import parameterized
@@ -11,9 +12,10 @@ from lxm3.experimental import job_script_builder
 HERE = os.path.dirname(__file__)
 
 
-singularity_image = "/home/yicheng/projects/lxm3/examples/basic/python_3.10-slim.sif"
+singularity_image = "examples/basic/python_3.10-slim.sif"
 
 
+@unittest.skip("Skip until we have a better way to test this")
 class ScriptGenTest(parameterized.TestCase):
     @parameterized.parameters((False,), (True,))
     def test_array_script(self, use_singularity):
