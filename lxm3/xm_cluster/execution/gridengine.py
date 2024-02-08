@@ -1,5 +1,6 @@
 import functools
 import os
+import re
 from typing import List, Optional
 
 from absl import logging
@@ -13,10 +14,12 @@ from lxm3.xm_cluster import executables
 from lxm3.xm_cluster import executors
 from lxm3.xm_cluster import requirements as cluster_requirements
 from lxm3.xm_cluster.console import console
-from lxm3.xm_cluster.execution import job_script
+from lxm3.xm_cluster.execution import job_script_builder
 
 
-class GridEngineJobScriptBuilder(job_script.JobScriptBuilder):
+class GridEngineJobScriptBuilder(
+    job_script_builder.JobScriptBuilder[executors.GridEngine]
+):
     TASK_OFFSET = 1
     JOB_SCRIPT_SHEBANG = "#!/usr/bin/env bash"
     TASK_ID_VAR_NAME = "SGE_TASK_ID"
@@ -68,11 +71,11 @@ class GridEngineJobScriptBuilder(job_script.JobScriptBuilder):
         return job_header
 
     def build(
-        self, job: job_script.ClusterJob, job_name: str, job_script_dir: str
+        self, job: job_script_builder.ClusterJob, job_name: str, job_log_dir: str
     ) -> str:
         assert isinstance(job.executor, self.executor_cls)
         assert isinstance(job.executable, self.executable_cls)
-        return super().build(job, job_name, job_script_dir)
+        return super().build(job, job_name, job_log_dir)
 
 
 class GridEngineHandle:
@@ -95,7 +98,7 @@ def _sge_job_predicate(job):
         raise ValueError(f"Unexpected job type: {type(job)}")
 
 
-class GridEngineClient(job_script.JobClient):
+class GridEngineClient:
     builder_cls = GridEngineJobScriptBuilder
     _settings: config_lib.ClusterSettings
 
@@ -123,16 +126,41 @@ class GridEngineClient(job_script.JobClient):
             self._settings.hostname, self._settings.user
         )
 
-    def _launch(self, job_script_path, num_jobs):
-        cluster = self._cluster
+    def launch(self, job_name: str, job: job_script_builder.ClusterJob):
+        job_name = re.sub("\\W", "_", job_name)
+        job_script_dir = self._artifact_store.job_path(job_name)
+        job_log_dir = self._artifact_store.job_log_path(job_name)
+        builder = self.builder_cls(self._settings)
+        job_script_content = builder.build(job, job_name, job_log_dir)
+
+        self._artifact_store.deploy_job_scripts(job_name, job_script_content)
+        job_script_path = os.path.join(
+            job_script_dir, job_script_builder.JOB_SCRIPT_NAME
+        )
+
+        if isinstance(job, array_job.ArrayJob):
+            num_jobs = len(job.env_vars)
+        else:
+            num_jobs = 1
+
         console.log(f"Launching {num_jobs} job on {self._settings.hostname}")
-
         console.log(f"Launch with command:\n  qsub {job_script_path}")
-        group = cluster.launch(job_script_path)
+        group = self._cluster.launch(job_script_path)
         console.log(f"Successfully launched job {group.group(0)}")
-        job_ids = gridengine.split_job_ids(group)
+        console.log(f"Logs are saved in {job_log_dir}")
 
-        return group.group(0), [GridEngineHandle(job_id) for job_id in job_ids]
+        handles = [
+            GridEngineHandle(job_id) for job_id in gridengine.split_job_ids(group)
+        ]
+
+        self._save_job_id(job_script_path, group.group(0))
+
+        return handles
+
+    def _save_job_id(self, job_script_path: str, job_id: str):
+        self._artifact_store._fs.write_text(
+            os.path.join(os.path.dirname(job_script_path), "job_id"), f"{job_id}\n"
+        )
 
 
 @functools.lru_cache()
@@ -140,7 +168,9 @@ def client():
     return GridEngineClient()
 
 
-async def launch(job_name: str, job: job_script.ClusterJob) -> List[GridEngineHandle]:
+async def launch(
+    job_name: str, job: job_script_builder.ClusterJob
+) -> List[GridEngineHandle]:
     if isinstance(job, array_job.ArrayJob):
         jobs = [job]  # type: ignore
     elif isinstance(job, xm.JobGroup):

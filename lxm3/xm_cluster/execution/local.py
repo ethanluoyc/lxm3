@@ -3,9 +3,10 @@ import atexit
 import concurrent.futures
 import functools
 import os
+import re
 import shutil
 import subprocess
-from typing import List, Optional, Union
+from typing import List, Optional
 
 from absl import logging
 
@@ -16,7 +17,7 @@ from lxm3.xm_cluster import config as config_lib
 from lxm3.xm_cluster import executables
 from lxm3.xm_cluster import executors
 from lxm3.xm_cluster.console import console
-from lxm3.xm_cluster.execution import job_script
+from lxm3.xm_cluster.execution import job_script_builder
 
 _LOCAL_EXECUTOR: Optional[concurrent.futures.ThreadPoolExecutor] = None
 
@@ -35,7 +36,7 @@ def local_executor():
     return _LOCAL_EXECUTOR
 
 
-class LocalJobScriptBuilder(job_script.JobScriptBuilder):
+class LocalJobScriptBuilder(job_script_builder.JobScriptBuilder[executors.Local]):
     TASK_OFFSET = 1
     JOB_SCRIPT_SHEBANG = "#!/usr/bin/env bash"
     TASK_ID_VAR_NAME = "LOCAL_TASK_ID"
@@ -60,7 +61,7 @@ class LocalJobScriptBuilder(job_script.JobScriptBuilder):
     @classmethod
     def _create_job_header(
         cls,
-        executor: executors.GridEngine,
+        executor: executors.Local,
         num_array_tasks: Optional[int],
         job_log_dir: str,
         job_name: str,
@@ -69,14 +70,11 @@ class LocalJobScriptBuilder(job_script.JobScriptBuilder):
         return ""
 
     def build(
-        self,
-        job: Union[xm.Job, array_job_lib.ArrayJob],
-        job_name: str,
-        job_script_dir: str,
+        self, job: job_script_builder.ClusterJob, job_name: str, job_log_dir: str
     ) -> str:
         assert isinstance(job.executor, executors.Local)
         assert isinstance(job.executable, executables.Command)
-        return super().build(job, job_name, job_script_dir)
+        return super().build(job, job_name, job_log_dir)
 
 
 class LocalExecutionHandle:
@@ -99,7 +97,7 @@ def _local_job_predicate(job):
         raise ValueError(f"Unexpected job type: {type(job)}")
 
 
-class LocalClient(job_script.JobClient):
+class LocalClient:
     builder_cls = LocalJobScriptBuilder
 
     def __init__(
@@ -120,7 +118,23 @@ class LocalClient(job_script.JobClient):
 
         self._artifact_store = artifact_store
 
-    def _launch(self, job_script_path, num_jobs):
+    def launch(self, job_name: str, job: job_script_builder.ClusterJob):
+        job_name = re.sub("\\W", "_", job_name)
+        job_script_dir = self._artifact_store.job_path(job_name)
+        job_log_dir = self._artifact_store.job_log_path(job_name)
+        builder = self.builder_cls(self._settings)
+        job_script_content = builder.build(job, job_name, job_log_dir)
+
+        self._artifact_store.deploy_job_scripts(job_name, job_script_content)
+        job_script_path = os.path.join(
+            job_script_dir, job_script_builder.JOB_SCRIPT_NAME
+        )
+
+        if isinstance(job, array_job_lib.ArrayJob):
+            num_jobs = len(job.env_vars)
+        else:
+            num_jobs = 1
+
         console.print(f"Launching {num_jobs} jobs locally...")
         handles = []
         for i in range(num_jobs):
@@ -139,7 +153,7 @@ class LocalClient(job_script.JobClient):
             future = local_executor().submit(task, i)
             handles.append(LocalExecutionHandle(future))
 
-        return None, handles
+        return handles
 
 
 @functools.lru_cache()
@@ -147,7 +161,7 @@ def client() -> LocalClient:
     return LocalClient()
 
 
-async def launch(job_name: str, job: job_script.ClusterJob):
+async def launch(job_name: str, job: job_script_builder.ClusterJob):
     if isinstance(job, array_job_lib.ArrayJob):
         jobs = [job]  # type: ignore
     elif isinstance(job, xm.JobGroup):

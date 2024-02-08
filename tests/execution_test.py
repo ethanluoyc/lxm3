@@ -20,7 +20,7 @@ from lxm3.xm_cluster import config
 from lxm3.xm_cluster import executables
 from lxm3.xm_cluster import executors
 from lxm3.xm_cluster.execution import gridengine
-from lxm3.xm_cluster.execution import job_script
+from lxm3.xm_cluster.execution import job_script_builder as job_script
 from lxm3.xm_cluster.execution import local
 from lxm3.xm_cluster.execution import slurm
 

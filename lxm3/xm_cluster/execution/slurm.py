@@ -1,6 +1,7 @@
 import datetime
 import functools
 import os
+import re
 from typing import List, Optional
 
 from lxm3 import xm
@@ -11,10 +12,10 @@ from lxm3.xm_cluster import config as config_lib
 from lxm3.xm_cluster import executables
 from lxm3.xm_cluster import executors
 from lxm3.xm_cluster.console import console
-from lxm3.xm_cluster.execution import job_script
+from lxm3.xm_cluster.execution import job_script_builder
 
 
-class SlurmJobScriptBuilder(job_script.JobScriptBuilder):
+class SlurmJobScriptBuilder(job_script_builder.JobScriptBuilder[executors.Slurm]):
     TASK_OFFSET = 1
     JOB_SCRIPT_SHEBANG = "#!/usr/bin/bash -l"
     TASK_ID_VAR_NAME = "SLURM_ARRAY_TASK_ID"
@@ -25,7 +26,7 @@ class SlurmJobScriptBuilder(job_script.JobScriptBuilder):
         return True  # TODO
 
     @classmethod
-    def _create_setup_cmds(cls, executable, executor) -> str:
+    def _create_setup_cmds(cls, executable, executor: executors.Slurm) -> str:
         cmds = ["echo >&2 INFO[$(basename $0)]: Running on host $(hostname)"]
 
         for module in executor.modules:
@@ -57,11 +58,11 @@ class SlurmJobScriptBuilder(job_script.JobScriptBuilder):
         return job_header
 
     def build(
-        self, job: job_script.ClusterJob, job_name: str, job_script_dir: str
+        self, job: job_script_builder.ClusterJob, job_name: str, job_log_dir: str
     ) -> str:
         assert isinstance(job.executor, executors.Slurm)
         assert isinstance(job.executable, executables.Command)
-        return super().build(job, job_name, job_script_dir)
+        return super().build(job, job_name, job_log_dir)
 
 
 class SlurmHandle:
@@ -84,7 +85,7 @@ def _slurm_job_predicate(job):
         raise ValueError(f"Unexpected job type: {type(job)}")
 
 
-class SlurmClient(job_script.JobClient):
+class SlurmClient:
     builder_cls = SlurmJobScriptBuilder
 
     def __init__(
@@ -112,16 +113,38 @@ class SlurmClient(job_script.JobClient):
             username=self._settings.user,
         )
 
-    def _launch(self, job_script_path, num_jobs):
-        console.log(f"Launch with command:\n  sbatch {job_script_path}")
-        cluster = self._cluster
-        job_id = cluster.launch(job_script_path)
+    def launch(self, job_name: str, job: job_script_builder.ClusterJob):
+        job_name = re.sub("\\W", "_", job_name)
+        job_script_dir = self._artifact_store.job_path(job_name)
+        job_log_dir = self._artifact_store.job_log_path(job_name)
+        builder = self.builder_cls(self._settings)
+        job_script_content = builder.build(job, job_name, job_log_dir)
+
+        self._artifact_store.deploy_job_scripts(job_name, job_script_content)
+        job_script_path = os.path.join(
+            job_script_dir, job_script_builder.JOB_SCRIPT_NAME
+        )
+
+        if isinstance(job, array_job.ArrayJob):
+            num_jobs = len(job.env_vars)
+        else:
+            num_jobs = 1
+
+        job_id = self._cluster.launch(job_script_path)
         console.log(f"Successfully launched job {job_id}")
         if num_jobs > 1:
             job_ids = [f"{job_id}_{i}" for i in range(num_jobs)]
         else:
             job_ids = [f"{job_id}"]
-        return job_id, [SlurmHandle(j) for j in job_ids]
+        handles = [SlurmHandle(j) for j in job_ids]
+        self._save_job_id(job_script_path, str(job_id))
+
+        return handles
+
+    def _save_job_id(self, job_script_path: str, job_id: str):
+        self._artifact_store._fs.write_text(
+            os.path.join(os.path.dirname(job_script_path), "job_id"), f"{job_id}\n"
+        )
 
 
 @functools.lru_cache()
@@ -129,7 +152,9 @@ def client() -> SlurmClient:
     return SlurmClient()
 
 
-async def launch(job_name: str, job: job_script.ClusterJob) -> List[SlurmHandle]:
+async def launch(
+    job_name: str, job: job_script_builder.ClusterJob
+) -> List[SlurmHandle]:
     if isinstance(job, array_job.ArrayJob):
         jobs = [job]  # type: ignore
     elif isinstance(job, xm.JobGroup):
