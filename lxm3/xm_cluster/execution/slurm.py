@@ -51,7 +51,6 @@ class SlurmJobScriptBuilder(job_script_builder.JobScriptBuilder[executors.Slurm]
         job_log_dir: str,
         job_name: str,
     ) -> str:
-        num_array_tasks = None
         job_header = header_from_executor(
             job_name, executor, num_array_tasks, job_log_dir
         )
@@ -129,9 +128,10 @@ class SlurmClient:
             num_jobs = len(job.env_vars)
         else:
             num_jobs = 1
-
+        console.log(f"Launching {num_jobs} job on {self._settings.hostname}")
         job_id = self._cluster.launch(job_script_path)
         console.log(f"Successfully launched job {job_id}")
+
         if num_jobs > 1:
             job_ids = [f"{job_id}_{i}" for i in range(num_jobs)]
         else:
@@ -215,9 +215,9 @@ def header_from_executor(
 
     log_directory = executor.log_directory or job_log_dir
     if num_array_tasks is not None:
-        stdout = os.path.join(log_directory, "slurm-%A_%a.out")
+        stdout = os.path.join(log_directory, "%x-%A_%a.out")
     else:
-        stdout = os.path.join(log_directory, "slurm-%j.out")
+        stdout = os.path.join(log_directory, "%x-%j.out")
 
     header.append(f"#SBATCH --output={stdout}")
 
