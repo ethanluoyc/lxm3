@@ -5,7 +5,6 @@ import atexit
 import hashlib
 import os
 import pathlib
-from typing import NamedTuple
 
 import appdirs
 import cachetools
@@ -13,13 +12,6 @@ import cachetools.keys
 import shelved_cache
 
 _DIGEST_CACHE = None
-
-
-class _CacheKey(NamedTuple):
-    path: str
-    node_id: int
-    time_modified: float
-    size: int
 
 
 def clear_cache():
@@ -39,20 +31,25 @@ def _get_cache():
     return _DIGEST_CACHE
 
 
+def _create_hash_key(stat: os.stat_result, path: str):
+    return (path, stat.st_ino, stat.st_mtime, stat.st_size)
+
+
 def sha256_digest(filename: str):
     path = os.path.abspath(filename)
     stat = os.stat(path)
 
-    cache_key = cachetools.keys.hashkey(
-        _CacheKey(path, stat.st_ino, stat.st_mtime, stat.st_size)
-    )
-    cache = _get_cache()
-    if cache_key in cache:
-        return cache[cache_key]
+    if stat.st_size > 4096:
+        cache_key = cachetools.keys.hashkey(_create_hash_key(stat, path))
+        cache = _get_cache()
+        if cache_key in cache:
+            return cache[cache_key]
+        else:
+            digest = f"sha256:{_sha256sum(path)}"
+            cache[cache_key] = digest
+            return digest
     else:
-        digest = f"sha256:{_sha256sum(path)}"
-        cache[cache_key] = digest
-        return digest
+        return f"sha256:{_sha256sum(path)}"
 
 
 def _sha256sum(path: str, block_size=2**20):

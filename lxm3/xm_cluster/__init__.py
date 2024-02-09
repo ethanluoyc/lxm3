@@ -1,3 +1,6 @@
+# Disable verbose logging from paramiko
+import logging
+
 from lxm3.xm_cluster.array_job import ArrayJob
 from lxm3.xm_cluster.config import Config
 from lxm3.xm_cluster.executable_specs import CommandList
@@ -19,3 +22,6 @@ from lxm3.xm_cluster.experiment import ClusterExperiment
 from lxm3.xm_cluster.experiment import ClusterWorkUnit
 from lxm3.xm_cluster.experiment import create_experiment
 from lxm3.xm_cluster.requirements import JobRequirements
+
+logging.getLogger("paramiko").setLevel(logging.WARNING)
+del logging

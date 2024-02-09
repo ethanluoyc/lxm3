@@ -1,6 +1,5 @@
 import abc
 import datetime
-import logging
 import os
 from typing import Any, Mapping, Optional
 
@@ -10,9 +9,6 @@ import rich.syntax
 from fsspec.implementations.sftp import SFTPFileSystem
 
 from lxm3.xm_cluster.console import console
-
-# Disable verbose logging from paramiko
-logging.getLogger("paramiko").setLevel(logging.WARNING)
 
 
 class ArtifactStore(abc.ABC):
@@ -151,7 +147,7 @@ class RemoteArtifactStore(ArtifactStore):
     ):
         if connect_kwargs is None:
             connect_kwargs = {}
-        fs = fsspec.filesystem("sftp", host=hostname, username=user, **connect_kwargs)
+        fs = SFTPFileSystem("sftp", host=hostname, username=user, **connect_kwargs)  # type: ignore
         # Normalize the storage root to an absolute path.
         self._host = hostname
         self._user = user
@@ -160,7 +156,7 @@ class RemoteArtifactStore(ArtifactStore):
         super().__init__(fs, staging_directory, project)
 
     def deploy_singularity_container(self, lpath, image_name):
-        assert not "/" not in image_name
+        assert "/" not in image_name
         deploy_container_path = self.singularity_image_path(image_name)
         should_update = self._should_update(lpath, deploy_container_path)
         if should_update:

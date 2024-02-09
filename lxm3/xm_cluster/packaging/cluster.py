@@ -1,4 +1,5 @@
 import os
+import pathlib
 import tempfile
 from typing import Any
 
@@ -11,6 +12,13 @@ from lxm3.xm_cluster import executable_specs as cluster_executable_specs
 from lxm3.xm_cluster import executables as cluster_executables
 from lxm3.xm_cluster.packaging import archive_builder
 from lxm3.xm_cluster.packaging import container_builder
+from lxm3.xm_cluster.packaging import digest_util
+
+
+def _get_push_image_name(image_path: str):
+    digest = digest_util.sha256_digest(image_path)
+    path = pathlib.Path(image_path)
+    return path.with_stem(path.stem + "@" + digest.replace(":", ".")).name
 
 
 def _package_python_package(
@@ -108,20 +116,22 @@ def _package_singularity_container(
 
     transport, _ = singularity.uri.split(singularity_image)
     if not transport:
-        push_image_name = os.path.basename(singularity_image)
+        push_image_name = _get_push_image_name(singularity_image)
         deploy_container_path = artifact_store.singularity_image_path(push_image_name)
         artifact_store.deploy_singularity_container(singularity_image, push_image_name)
     elif transport == "docker-daemon":
         # Try building singularity image using cache
+        # TODO(yl): Use the new image cache implementation
         cache_image_path = (
             singularity.images.build_singularity_image_from_docker_daemon(
                 singularity_image
             )
         )
-        push_image_name = os.path.basename(cache_image_path)
+        push_image_name = _get_push_image_name(cache_image_path)
         deploy_container_path = artifact_store.singularity_image_path(push_image_name)
         artifact_store.deploy_singularity_container(cache_image_path, push_image_name)
     else:
+        # For other transports, just use the image as is for now.
         deploy_container_path = singularity_image
 
     executable.singularity_image = deploy_container_path
