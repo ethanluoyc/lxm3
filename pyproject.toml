@@ -22,20 +22,22 @@ classifiers = [
 dynamic = ["version"]
 
 dependencies = [
-  "absl-py",
-  "attrs",
-  "ml_collections",
-  "tomlkit",
-  "paramiko",
-  "fabric",
-  "appdirs",
-  "fsspec",
-  "async_generator",
-  "immutabledict",
-  "rich",
-  "vcsinfo",
-  "docker",
-  "pip"
+    "absl-py",
+    "attrs",
+    "ml_collections",
+    "tomlkit",
+    "paramiko",
+    "fabric",
+    "appdirs",
+    "fsspec",
+    "async_generator",
+    "immutabledict",
+    "rich",
+    "vcsinfo",
+    "docker",
+    "pip",
+    "shelved-cache>=0.3.1",
+    "cachetools>=5.3.2",
 ]
 
 [project.urls]
