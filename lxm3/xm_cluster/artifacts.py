@@ -44,10 +44,8 @@ class ArtifactStore(abc.ABC):
     def singularity_image_path(self, image_name: str):
         return os.path.join(self._storage_root, "containers", image_name)
 
-    def archive_path(self, resource_uri: str):
-        return os.path.join(
-            self._storage_root, "archives", os.path.basename(resource_uri)
-        )
+    def archive_path(self, archive_name: str):
+        return os.path.join(self._storage_root, "archives", archive_name)
 
     def _should_update(self, src: str, dst: str) -> bool:
         if not self._fs.exists(dst):
@@ -90,24 +88,25 @@ class ArtifactStore(abc.ABC):
         self._put_content(self.job_script_path(job_name), job_script)
         console.log(f"Created job script {self.job_script_path(job_name)}")
 
-    def deploy_singularity_container(self, singularity_image):
-        image_name = os.path.basename(singularity_image)
+    def deploy_singularity_container(self, lpath, image_name):
+        assert "/" not in image_name
         deploy_container_path = self.singularity_image_path(image_name)
-        should_update = self._should_update(singularity_image, deploy_container_path)
+        should_update = self._should_update(lpath, deploy_container_path)
         if should_update:
             self._fs.makedirs(os.path.dirname(deploy_container_path), exist_ok=True)
-            self._put_file(singularity_image, deploy_container_path)
+            self._put_file(lpath, deploy_container_path)
             console.log(f"Deployed Singularity container to {deploy_container_path}")
         else:
             console.log(f"Container {deploy_container_path} exists, skip upload.")
         return deploy_container_path
 
-    def deploy_resource_archive(self, resource_uri):
-        deploy_archive_path = self.archive_path(resource_uri)
+    def deploy_resource_archive(self, lpath, archive_name):
+        assert "/" not in archive_name
+        deploy_archive_path = self.archive_path(archive_name)
 
-        should_update = self._should_update(resource_uri, deploy_archive_path)
+        should_update = self._should_update(lpath, deploy_archive_path)
         if should_update:
-            self._put_file(resource_uri, deploy_archive_path)
+            self._put_file(lpath, deploy_archive_path)
             console.log(f"Deployed archive to {deploy_archive_path}")
         else:
             console.log(f"Archive {deploy_archive_path} exists, skipping upload.")
@@ -125,15 +124,14 @@ class LocalArtifactStore(ArtifactStore):
             # Create a .gitignore file to prevent git from tracking the directory
             self._fs.write_text(os.path.join(self._storage_root, ".gitignore"), "*\n")
 
-    def deploy_singularity_container(self, singularity_image):
-        image_name = os.path.basename(singularity_image)
+    def deploy_singularity_container(self, lpath, image_name):
         deploy_container_path = self.singularity_image_path(image_name)
-        should_update = self._should_update(singularity_image, deploy_container_path)
+        should_update = self._should_update(lpath, deploy_container_path)
         if should_update:
             self._fs.makedirs(os.path.dirname(deploy_container_path), exist_ok=True)
             if os.path.exists(deploy_container_path):
                 os.unlink(deploy_container_path)
-            self._put_file(singularity_image, deploy_container_path)
+            self._put_file(lpath, deploy_container_path)
             console.log(f"Deployed Singularity container to {deploy_container_path}")
         else:
             console.log(f"Container {deploy_container_path} exists, skip upload.")
@@ -161,10 +159,10 @@ class RemoteArtifactStore(ArtifactStore):
             staging_directory = fs.ftp.normalize(staging_directory)
         super().__init__(fs, staging_directory, project)
 
-    def deploy_singularity_container(self, singularity_image):
-        image_name = os.path.basename(singularity_image)
+    def deploy_singularity_container(self, lpath, image_name):
+        assert not "/" not in image_name
         deploy_container_path = self.singularity_image_path(image_name)
-        should_update = self._should_update(singularity_image, deploy_container_path)
+        should_update = self._should_update(lpath, deploy_container_path)
         if should_update:
             with rich.progress.Progress(
                 rich.progress.TextColumn("[progress.description]{task.description}"),
@@ -176,9 +174,7 @@ class RemoteArtifactStore(ArtifactStore):
             ) as progress:
                 self._fs.makedirs(os.path.dirname(deploy_container_path), exist_ok=True)
 
-                task = progress.add_task(
-                    f"Uploading {os.path.basename(singularity_image)}"
-                )
+                task = progress.add_task(f"Uploading {os.path.basename(lpath)}")
 
                 def callback(transferred_bytes: int, total_bytes: int):
                     progress.update(
@@ -186,7 +182,7 @@ class RemoteArtifactStore(ArtifactStore):
                     )
 
                 self._fs.ftp.put(
-                    singularity_image,
+                    lpath,
                     deploy_container_path,
                     callback=callback,
                     confirm=True,

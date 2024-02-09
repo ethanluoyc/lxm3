@@ -22,8 +22,9 @@ def _package_python_package(
         archive_name = archive_builder.create_python_archive(staging, py_package)
         local_archive_path = os.path.join(staging, archive_name)
         entrypoint_cmd = archive_builder.ENTRYPOINT_SCRIPT
+        push_archive_name = os.path.basename(local_archive_path)
         deployed_archive_path = artifact_store.deploy_resource_archive(
-            local_archive_path
+            local_archive_path, push_archive_name
         )
 
     return cluster_executables.Command(
@@ -45,8 +46,9 @@ def _package_universal_package(
             staging, universal_package
         )
         local_archive_path = os.path.join(staging, os.path.basename(archive_name))
+        push_archive_name = os.path.basename(local_archive_path)
         deployed_archive_path = artifact_store.deploy_resource_archive(
-            local_archive_path
+            local_archive_path, push_archive_name
         )
 
     return cluster_executables.Command(
@@ -106,10 +108,9 @@ def _package_singularity_container(
 
     transport, _ = singularity.uri.split(singularity_image)
     if not transport:
-        deploy_container_path = artifact_store.singularity_image_path(
-            os.path.basename(singularity_image)
-        )
-        artifact_store.deploy_singularity_container(singularity_image)
+        push_image_name = os.path.basename(singularity_image)
+        deploy_container_path = artifact_store.singularity_image_path(push_image_name)
+        artifact_store.deploy_singularity_container(singularity_image, push_image_name)
     elif transport == "docker-daemon":
         # Try building singularity image using cache
         cache_image_path = (
@@ -117,10 +118,9 @@ def _package_singularity_container(
                 singularity_image
             )
         )
-        deploy_container_path = artifact_store.singularity_image_path(
-            os.path.basename(cache_image_path)
-        )
-        artifact_store.deploy_singularity_container(str(cache_image_path))
+        push_image_name = os.path.basename(cache_image_path)
+        deploy_container_path = artifact_store.singularity_image_path(push_image_name)
+        artifact_store.deploy_singularity_container(cache_image_path, push_image_name)
     else:
         deploy_container_path = singularity_image
 
