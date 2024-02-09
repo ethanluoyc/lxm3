@@ -18,7 +18,16 @@ _GPU = flags.DEFINE_boolean("gpu", False, "If set, use GPU")
 
 
 def build_image(path: str, tag: str, dockerfile: str):
-    cmd = ["docker", "buildx", "build", "-t", tag, "-f", dockerfile, path]
+    cmd = [
+        "docker",
+        "buildx",
+        "build",
+        "-t",
+        tag,
+        "-f",
+        xm.utils.resolve_path_relative_to_launcher(dockerfile),
+        xm.utils.resolve_path_relative_to_launcher(path),
+    ]
     subprocess.run(cmd, check=True)
     return f"docker-daemon://{tag}"
 

@@ -42,6 +42,13 @@ import tempfile
 from lxm3 import singularity
 
 
+def _log(message):
+    # Consider moving this out
+    from lxm3.xm_cluster.console import console  # noqa
+
+    console.log(message, style="dim")
+
+
 @dataclasses.dataclass(frozen=True)
 class ImageInfo:
     """A dataclass to represent the cached image."""
@@ -96,6 +103,17 @@ class ImageCache:
         )
 
 
+# Adopted from docker.utils
+def parse_repository_tag(repo_name):
+    parts = repo_name.rsplit("@", 1)
+    if len(parts) == 2:
+        return tuple(parts)
+    parts = repo_name.rsplit(":", 1)
+    if len(parts) == 2 and "/" not in parts[1]:
+        return tuple(parts)
+    return repo_name, None
+
+
 def get_cached_image(image_spec: str, cache_dir: str) -> ImageInfo:
     """Get the cached image if it exists, otherwise build and cache it.
     Args:
@@ -118,6 +136,9 @@ def get_cached_image(image_spec: str, cache_dir: str) -> ImageInfo:
 
     """
     transport, ref = singularity.uri.split(image_spec)
+    if ref.startswith("//"):
+        ref = ref[2:]
+
     image_name = singularity.uri.filename(image_spec, "sif")
 
     if transport == "docker-daemon":
@@ -127,7 +148,8 @@ def get_cached_image(image_spec: str, cache_dir: str) -> ImageInfo:
             raise ImportError(
                 "docker package is required to use docker daemon transport"
             )
-        cache = ImageCache(os.path.join(cache_dir, "docker-daemon"))
+        repository = parse_repository_tag(ref)[0]
+        cache = ImageCache(os.path.join(cache_dir, "docker-daemon", repository))
         client = docker.from_env()
         digest = client.images.get(ref).id
         digest = str(digest)
@@ -140,10 +162,9 @@ def get_cached_image(image_spec: str, cache_dir: str) -> ImageInfo:
             raise ImportError(
                 "podman package is required to use docker daemon transport"
             )
-        cache = ImageCache(os.path.join(cache_dir, "podman-daemon"))
+        repository = parse_repository_tag(ref)[0]
+        cache = ImageCache(os.path.join(cache_dir, "podman-daemon", repository))
         client = podman.PodmanClient()
-        if ref.startswith("//"):
-            ref = ref[2:]
         digest = str(client.images.get(ref).id)
         del client
     else:
@@ -154,12 +175,14 @@ def get_cached_image(image_spec: str, cache_dir: str) -> ImageInfo:
         assert image_info is not None
         if image_info.digest != digest:
             if cache.blob_exists(digest):
-                print(f"Reusing cached blob {digest} for image {image_name}")
+                _log(
+                    f"Reusing cached blob {digest[:16]} for image {image_name}",
+                )
                 # Image does not exist but blob does
                 # Just link
                 cache.link(image_name, digest)
             else:
-                print(f"Rebuilding image {image_name} from {image_spec}")
+                _log(f"Rebuilding image {image_name} from {image_spec}")
                 with tempfile.TemporaryDirectory() as tmpdir:
                     build_image_path = pathlib.Path(tmpdir) / image_name
                     if transport == "docker-daemon":
@@ -188,17 +211,17 @@ def get_cached_image(image_spec: str, cache_dir: str) -> ImageInfo:
                     # Update image links
                     cache.link(image_name, digest)
         else:
-            print(f"Reusing cached image {image_info.path} from {digest}")
+            _log(f"Reusing cached image {image_info.path} from {digest[:16]}")
         return cache.get_image(image_name)
     else:
         if cache.blob_exists(digest):
-            print(f"Link image {image_name} to {cache.blob_path(digest)}")
+            _log(f"Link image {image_name} to {cache.blob_path(digest)}")
             # Image does not exist but blob does
             # Just link
             cache.link(image_name, digest)
         else:
             # Neither image nor blob exists
-            print(f"Rebuilding image {image_name} from {image_spec}")
+            _log(f"Rebuilding image {image_name} from {image_spec}")
             with tempfile.TemporaryDirectory() as tmpdir:
                 build_image_path = pathlib.Path(tmpdir) / image_name
                 if transport == "docker-daemon":

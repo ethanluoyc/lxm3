@@ -1,24 +1,29 @@
 import os
-import pathlib
 import tempfile
 from typing import Any
+
+import appdirs
 
 from lxm3 import singularity
 from lxm3 import xm
 from lxm3._vendor.xmanager.xm import pattern_matching
+from lxm3.experimental import image_cache
 from lxm3.xm_cluster import artifacts
 from lxm3.xm_cluster import config as config_lib
 from lxm3.xm_cluster import executable_specs as cluster_executable_specs
 from lxm3.xm_cluster import executables as cluster_executables
 from lxm3.xm_cluster.packaging import archive_builder
 from lxm3.xm_cluster.packaging import container_builder
-from lxm3.xm_cluster.packaging import digest_util
 
+# from lxm3.xm_cluster.packaging import digest_util
 
-def _get_push_image_name(image_path: str):
-    digest = digest_util.sha256_digest(image_path)
-    path = pathlib.Path(image_path)
-    return path.with_stem(path.stem + "@" + digest.replace(":", ".")).name
+_IMAGE_CACHE_DIR = os.path.join(appdirs.user_cache_dir("lxm3"), "image_cache")
+
+# def _get_push_image_name(image_path: str, digest: Optional[str] = None) -> str:
+#     if digest is None:
+#         digest = digest_util.sha256_digest(image_path)
+#     path = pathlib.Path(image_path)
+#     return path.with_stem(path.stem + "@" + digest.replace(":", ".")).name
 
 
 def _package_python_package(
@@ -80,7 +85,9 @@ def _package_pdm_project(
     dockerfile = container_builder.pdm_dockerfile(
         pdm_project.base_image, pdm_project.lock_file
     )
-    container_builder.build_docker_image(py_package.name, dockerfile, py_package.path)
+    container_builder.build_image_by_dockerfile_content(
+        py_package.name, dockerfile, py_package.path
+    )
 
     singularity_image = "docker-daemon://{}:latest".format(py_package.name)
     spec = cluster_executable_specs.SingularityContainer(py_package, singularity_image)
@@ -99,7 +106,9 @@ def _package_python_container(
         base_image=python_container.base_image,
         requirements=python_container.requirements,
     )
-    container_builder.build_docker_image(py_package.name, dockerfile, py_package.path)
+    container_builder.build_image_by_dockerfile_content(
+        py_package.name, dockerfile, py_package.path
+    )
     singularity_image = "docker-daemon://{}:latest".format(py_package.name)
     spec = cluster_executable_specs.SingularityContainer(py_package, singularity_image)
     return _package_singularity_container(spec, packageable, artifact_store)
@@ -115,23 +124,24 @@ def _package_singularity_container(
     singularity_image = container.image_path
 
     transport, _ = singularity.uri.split(singularity_image)
+    # TODO(yl): Add support for other transports.
+    # TODO(yl): think about keeping multiple versions of the container in the storage.
     if not transport:
-        push_image_name = _get_push_image_name(singularity_image)
+        push_image_name = os.path.basename(singularity_image)
         deploy_container_path = artifact_store.singularity_image_path(push_image_name)
         artifact_store.deploy_singularity_container(singularity_image, push_image_name)
     elif transport == "docker-daemon":
-        # Try building singularity image using cache
-        # TODO(yl): Use the new image cache implementation
-        cache_image_path = (
-            singularity.images.build_singularity_image_from_docker_daemon(
-                singularity_image
-            )
+        cache_image_info = image_cache.get_cached_image(
+            singularity_image, cache_dir=_IMAGE_CACHE_DIR
         )
-        push_image_name = _get_push_image_name(cache_image_path)
+        push_image_name = singularity.uri.filename(singularity_image, "sif")
         deploy_container_path = artifact_store.singularity_image_path(push_image_name)
-        artifact_store.deploy_singularity_container(cache_image_path, push_image_name)
+        artifact_store.deploy_singularity_container(
+            cache_image_info.blob_path, push_image_name
+        )
     else:
         # For other transports, just use the image as is for now.
+        # TODO(yl): Consider adding support for specifying pulling behavior.
         deploy_container_path = singularity_image
 
     executable.singularity_image = deploy_container_path
