@@ -29,23 +29,78 @@ You can also install from GitHub for the latest features.
 pip install git+https://github.com/ethanluoyc/lxm3
 ```
 
-## Documentation
+## Prerequisites
+
+### Set up configuration file (required)
+You should create a configuration file for setting up credentials and storage location
+for your cluster. In addition, the configuration file is also required to specify the
+storage location for the local executor.
+
+Create a configuration file at `$XDG_CONFIG_HOME/lxm3/config.toml` (defaults to `~/.config/lxm3/config.toml`) with the following content:
+
+```toml
+project = "" # Optional project name
+# Configuration for running in local mode.
+[local]
+[local.storage]
+# Configuration to lxm3 to stage local artifacts.
+staging = "~/.cache/lxm3"
+
+# Configuration for running on clusters. Omit if you are only using local mode.
+[[clusters]]
+# Set a name for this cluster, e.g., "cs"
+name = "<TODO>"
+# Replace with the server you normally use for ssh into the cluster, e.g. "beaker.cs.ucl.ac.uk"
+server = "<TODO>"
+# Fill in the username you use for this cluster.
+user = "<TODO>"
+# Uncomment and update the line below if you would like to use a private key file ssh.
+# ssh_private_key = "~/.ssh/<private key name>"
+# Uncomment and update the line below if you would like to use a password for ssh.
+# password = "<password>"
+# Uncomment and update the line below if you need to connect to the cluster
+# via a jump server. This corresponds to the proxycommand option in ssh_config.
+# proxycommand = ""
+
+[clusters.storage]
+# Replace with the path to a staging directory on the cluster. lxm3 uses this directory for storing all files required to run your job.
+# This should be an absolute directory and should not be a symlink
+staging = "<absolute path to your home directory>/lxm3-staging"
+
+```
+
+### Install Singularity/Apptainer (optional)
+If you use the `SingularityContainer` executable, you should install Singularity/Apptainer
+on your machine. Your cluster should have installed Singularity/Apptainer on your HPC cluster as well.
+Follow the instructions on the [singularity website](https://docs.sylabs.io/guides/4.1/admin-guide/installation.html) or [apptainer website](https://apptainer.org/docs/admin/latest/installation.html) to install Singularity/Apptainer respectively. Currently, lxm3
+supports Apptainer via the singularity symlink.
+
+### Install Docker (optional)
+We recommend installing Docker as well even though you are using Singularity/Apptainer.
+This would allow your to use Docker's build cache to speed up the build process. An experimental
+`DockerContainer` is also provided for running jobs with Docker.
+
+## Writing lxm3 launch scripts
 At a high level you can launch experiment by creating a launch script
 called `launcher.py` that looks like:
 
 ```python
+# Create an experiment and acquite its context
 with xm_cluster.create_experiment(experiment_title="hello world") as experiment:
-    # Launch on a Slurm cluster
-    executor = xm_cluster.Slurm()
-    # or, if you want to use SGE:
-    # executor = xm_cluster.GridEngine()
-    # or, if you want to run locally:
-    # executor = xm_cluster.Local()
 
+    # Define an specification for the executable you want to run
     spec = xm_cluster.PythonPackage(
        path=".",
        entrypoint=xm_cluster.ModuleName("my_package.main"),
     )
+
+    # Define an executor for the executable
+    # To launch locally
+    executor = xm_cluster.Local()
+    # or, if you want to use SGE:
+    # executor = xm_cluster.GridEngine()
+    # or, if you want to run on a Slurm cluster:
+    executor = xm_cluster.Slurm()
 
     # package your code
     [executable] = experiment.package(
