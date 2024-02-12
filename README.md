@@ -3,12 +3,13 @@
 ![PyPI - Python Version](https://img.shields.io/pypi/pyversions/lxm3)
 ![Read the Docs](https://img.shields.io/readthedocs/lxm3)
 [![pdm-managed](https://img.shields.io/badge/pdm-managed-blueviolet)](https://pdm-project.org)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-lxm3 provides an implementation for DeepMind's [XManager](https://github.com/deepmind/xmanager/tree/main) launch API that aims to provide a similar experience for running experiments on traditional HPC.
+lxm3 provides an implementation for DeepMind's [XManager](https://github.com/deepmind/xmanager/tree/main) launch API that aims to provide a similar experience for running experiments on traditional HPC. It provides a local execution backend and support for the [SGE](https://en.wikipedia.org/wiki/Oracle_Grid_Engine) and [Slurm](https://slurm.schedmd.com/) schedulers.
 
-Currently, lxm3 provides a local execution backend and support for the [SGE](https://en.wikipedia.org/wiki/Oracle_Grid_Engine) and [Slurm](https://slurm.schedmd.com/) schedulers.
+<img src="docs/logo.png" alt="logo" style="width:400px;"/>
+
+_LXM3 Image created by GPT-4_
 
 __NOTE__: lxm3 is still in early development. The API is not stable and may change in the future. We periodically update tag versions which are considered in good shape.
 If you use lxm3 in your project, please pin to a specific commit/tag to avoid
