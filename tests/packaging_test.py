@@ -36,6 +36,32 @@ class PackagingTest(parameterized.TestCase):
             )
             self.assertIsInstance(executable, xm_cluster.Command)
 
+    # @parameterized.parameters((cluster._package_python_package,))
+    # def test_package_python_resource_overwrites(self, pkg_fun):
+    #     resource = xm_cluster.Fileset(
+    #         files={
+    #             os.path.join(
+    #                 _HERE, "testdata/test_pkg/py_package/main.py"
+    #             ): "py_package/main.py",
+    #         }
+    #     )
+    #     spec = xm_cluster.PythonPackage(
+    #         entrypoint=xm_cluster.ModuleName("py_package.main"),
+    #         path=os.path.join(_HERE, "testdata/test_pkg"),
+    #         resources=[resource],
+    #     )
+
+    #     tmpdir = self.create_tempdir().full_path
+    #     store = artifacts.LocalArtifactStore(tmpdir, "test")
+    #     pkg_fun(
+    #         spec,
+    #         xm.Packageable(
+    #             spec,
+    #             xm_cluster.Local().Spec(),
+    #         ),
+    #         store,
+    #     )
+
     def test_package_default_pip_args(self):
         spec = xm_cluster.PythonPackage(
             entrypoint=xm_cluster.ModuleName("py_package.main"),

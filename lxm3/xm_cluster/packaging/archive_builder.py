@@ -1,4 +1,5 @@
 import datetime
+import filecmp
 import glob
 import os
 import shutil
@@ -74,9 +75,13 @@ def create_python_archive(
                     if not os.path.exists(target_file):
                         shutil.copy(src, target_file)
                     else:
-                        raise ValueError(
-                            "Additional resource overwrites existing file: %s", src
-                        )
+                        # Trying to override a file in the archive,
+                        # check if the file contents are the same
+                        if not filecmp.cmp(src, target_file):
+                            # Raise if contents differ
+                            raise ValueError(
+                                "Additional resource overwrites existing file: %s", src
+                            )
 
             if os.path.exists(os.path.join(tmpdir, "bin")):
                 console.log('Removing "bin/" directory as these are not yet portable.')
