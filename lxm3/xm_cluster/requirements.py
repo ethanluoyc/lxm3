@@ -29,9 +29,7 @@ class _CaseInsensetiveResourceTypeMeta(enum.EnumMeta):
         try:
             return super().__getitem__(resource_name.upper())
         except KeyError:
-            raise KeyError(
-                f"Unknown {cls.__name__} {resource_name!r}"
-            )  # pylint: disable=raise-missing-from
+            raise KeyError(f"Unknown {cls.__name__} {resource_name!r}")  # pylint: disable=raise-missing-from
 
 
 class ResourceType(enum.Enum, metaclass=_CaseInsensetiveResourceTypeMeta):
@@ -54,9 +52,7 @@ class ResourceType(enum.Enum, metaclass=_CaseInsensetiveResourceTypeMeta):
         return self._name_
 
 
-def _enum_subset(
-    class_name: str, values: Iterable[ResourceType]
-) -> type:  # pylint: disable=g-bare-generic
+def _enum_subset(class_name: str, values: Iterable[ResourceType]) -> type:  # pylint: disable=g-bare-generic
     """Returns an enum subset class.
 
     The class is syntactically equivalent to an enum with the given resource
@@ -204,6 +200,7 @@ class JobRequirements:
       service_tier: A service tier at which the job should run.
       replicas: Number of identical tasks to run within a job
     """
+
     # pyformat:enable
 
     task_requirements: ResourceDict

@@ -77,34 +77,17 @@ test = "pytest lxm3 tests"
 test-cov = "pytest --cov=lxm3 --cov-report=xml tests"
 cov = {composite = ["test-cov", "coverage report"]}
 docs = "sphinx-build -b html docs docs/build/html -j auto"
-lint.shell = "ruff . && black --check --diff ."
-fmt.shell = "black . && ruff --fix ."
-
-[tool.black]
-line-length = 88
-target-version = ['py310']
-include = '\.pyi?$'
-exclude = '''
-/(
-    \.eggs
-  | \.git
-  | docs
-  | .github
-  | third_party
-  | _vendor
-  | scratch
-  | .venv
-)/
-'''
+lint.shell = "ruff ."
+fmt.shell = "ruff format ."
 
 [tool.ruff]
-line-length = 120
 select = [
   "E",   # pycodestyle
   "F",   # pyflakes
-  "I",
+  "I",   # isort
 ]
 exclude = ["_vendor", "xm", ".venv"]
+ignore = ["E501"]
 
 [tool.ruff.extend-per-file-ignores]
 "__init__.py" = ["F401"]

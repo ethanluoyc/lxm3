@@ -23,4 +23,3 @@ user = "<TODO>"
 [clusters.storage]
 # Replace with the path to a staging directory on the cluster. lxm3 uses this directory for storing all files required to run your job.
 staging = "<absolute path to your home directory>/lxm3-staging"
-

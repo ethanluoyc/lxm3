@@ -24,7 +24,7 @@ Environment variables
 The following environment variables can be used to configure the LXM3
 launcher:
 
-1. ``LXM_CONFIG``: Path to the configuration file. 
-2. ``LXM_PROJECT``: Name of the project to use. This is used as 
+1. ``LXM_CONFIG``: Path to the configuration file.
+2. ``LXM_PROJECT``: Name of the project to use. This is used as
     the sub-directory used when staging jobs.
 3. ``LXM_CLUSTER``: Name of default cluster to use for launching jobs.

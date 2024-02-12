@@ -252,9 +252,7 @@ if __name__ == "__main__":
                 """\
 #!/usr/bin/env bash
 {} run.py $@
-""".format(
-                    sys.executable
-                ),
+""".format(sys.executable),
             )
         executable = xm_cluster.Command(
             "foo", "./entrypoint.sh", resource_uri=tmpf.full_path
