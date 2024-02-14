@@ -70,7 +70,7 @@ source = "scm"
 
 [tool.pdm.build]
 source-includes = ["tests"]
-excludes = ["*_test.py"]
+excludes = ["**/*_test.py"]
 
 [tool.pdm.scripts]
 test = "pytest lxm3 tests"
