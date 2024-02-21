@@ -2,10 +2,10 @@
 # It is not intended for manual editing.
 
 [metadata]
-groups = ["default", "dev"]
+groups = ["default", "dev", "pex"]
 strategy = ["cross_platform"]
 lock_version = "4.4.1"
-content_hash = "sha256:3eeb86bb81e14e6ba0e739160cb583b373c1a73fed51f010606ed8723c9ecf49"
+content_hash = "sha256:8c2c652cf891884a2108380317082c3ab5e1329ec8227547b809d44ecd8397ad"
 
 [[package]]
 name = "absl-py"
@@ -846,6 +846,16 @@ summary = "Utility library for gitignore style pattern matching of file paths."
 files = [
     {file = "pathspec-0.11.2-py3-none-any.whl", hash = "sha256:1d6ed233af05e679efb96b1851550ea95bbb64b7c490b0f5aa52996c11e92a20"},
     {file = "pathspec-0.11.2.tar.gz", hash = "sha256:e0d8d0ac2f12da61956eb2306b69f9469b42f4deb0f3cb6ed47b9cce9996ced3"},
+]
+
+[[package]]
+name = "pex"
+version = "2.2.1"
+requires_python = "!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*,<3.13,>=2.7"
+summary = "The PEX packaging toolchain."
+files = [
+    {file = "pex-2.2.1-py2.py3-none-any.whl", hash = "sha256:cde6756dc1ace8b4e0175afcd62da29f6635abe5516671717dffacb512502630"},
+    {file = "pex-2.2.1.tar.gz", hash = "sha256:23adde5fd0439fd4468ad105662ba5b23118540b26632bd2362dfedad22b1aff"},
 ]
 
 [[package]]

@@ -6,7 +6,7 @@ build-backend = "pdm.backend"
 name = "lxm3"
 description = 'LXM3: XManager launch backend for HPC clusters'
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.9,<3.13"
 license = {text = "MIT"}
 keywords = ["machine-learning", "hpc", "packaging", "singularity"]
 authors = [{ name = "Yicheng Luo", email = "ethanluoyc@gmail.com" }]
@@ -50,19 +50,22 @@ lxm3 = "lxm3.cli.cli:entrypoint"
 
 [project.optional-dependencies]
 shell = ["IPython"]
+pex = [
+    "pex>2.1.139",
+]
 
 [tool.pdm.dev-dependencies]
 dev = [
-  "coverage[toml]>=6.5",
-  "pytest",
-  "pytest-cov",
-  "pre-commit",
-  "fabric",
-  "Sphinx",
-  "myst-parser",
-  "sphinx_nameko_theme",
-  "black>=23.1.0",
-  "ruff>=0.0.243",
+    "coverage[toml]>=6.5",
+    "pytest",
+    "pytest-cov",
+    "pre-commit",
+    "fabric",
+    "Sphinx",
+    "myst-parser",
+    "sphinx_nameko_theme",
+    "black>=23.1.0",
+    "ruff>=0.0.243",
 ]
 
 [tool.pdm.version]
