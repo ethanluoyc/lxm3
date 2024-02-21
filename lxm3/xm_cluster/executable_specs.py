@@ -186,6 +186,65 @@ class UniversalPackage(job_blocks.ExecutableSpec):
 
 
 @attr.s(auto_attribs=True)
+class PexBinary(job_blocks.ExecutableSpec):
+    """Experimental Python executable packed as PEX. Requires PEX to be installed.
+
+    `PexBinary` is more flexible than `PythonPackage` and does not assume that your project
+    can be packaged as a python distribution.
+
+    You should be familiar with the PEX (https://docs.pex-tool.org/) before using this.
+
+    Notes:
+        A few assumptions is currently hardcoded in LXM3:
+            1. No dependencies are bundled inside the PEX. This is to avoid bundling large
+            dependencies like TensorFlow. Instead, dependencies should be available
+            in the runtime environment (e.g. via a Singularity container). This implies
+            using `--inherit-path=fallback`.
+            2. Caching extracted PEXes is disabled. This is to avoid accumulating large
+            number of files in the default cache directory. Instead, we always extract
+            to a temporary directory (`./.pex` in the runtime root which is a scratch directory).
+
+    Args:
+        entrypoint: Entrypoint for the built executable. Only :obj:`ModuleName` is supported.
+        path: Path to the project. If it's a relative path, this will be resolved
+            relative to the launcher's working directory. This path will be used
+            as the working directory when building the PEX.
+        packages: List of packages to include in the PEX. Packages are directories containing
+            python code and will be passed to the ``pex`` command as '--package <package>'.
+            Syntax for passing packages nested in a subdirectory is the same as the PEX documentation.
+        modules: List of modules to include in the PEX. Modules are single python files and will
+            be passed to the ``pex`` command as '--module <module>'.
+            Syntax for passing modules nested in a subdirectory is the same as the PEX documentation.
+        dependencies: List of dependencies to include in the PEX. These are put inside
+            the _archive_ created by LXM3 as opposed to being bundled inside by the PEX
+            (via -D). Useful for including configuration files, etc.
+
+    TODOs:
+        Expose more options from the pex command line interface.
+
+    Examples:
+        See ``examples/pex_binary`` for an example.
+
+    Raises:
+        ValueError: If the build script is not executable.
+    """
+
+    entrypoint: ModuleName
+    path: str = attr.ib(converter=utils.resolve_path_relative_to_launcher, default=".")
+    packages: List[str] = attr.ib(
+        converter=list, default=attr.Factory(list), kw_only=True
+    )
+    modules: List[str] = attr.ib(
+        converter=list, default=attr.Factory(list), kw_only=True
+    )
+    dependencies: List[Fileset] = attr.ib(converter=list, default=attr.Factory(list))
+
+    @property
+    def name(self) -> str:
+        return name_from_path(self.path)
+
+
+@attr.s(auto_attribs=True)
 class SingularityContainer(job_blocks.ExecutableSpec):
     """An executable that can be executed in a Singularity container.
 
@@ -196,7 +255,7 @@ class SingularityContainer(job_blocks.ExecutableSpec):
             to the launcher's working directory.
     """
 
-    entrypoint: Union[UniversalPackage, PythonPackage]
+    entrypoint: Union[UniversalPackage, PythonPackage, PexBinary]
     image_path: str
 
     @property
@@ -262,7 +321,7 @@ class DockerContainer(job_blocks.ExecutableSpec):
         image: Name of the Docker image.
     """
 
-    entrypoint: Union[UniversalPackage, PythonPackage]
+    entrypoint: Union[UniversalPackage, PythonPackage, PexBinary]
     image: str
 
     @property

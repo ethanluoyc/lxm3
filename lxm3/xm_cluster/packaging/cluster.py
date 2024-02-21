@@ -1,4 +1,7 @@
+import contextlib
 import os
+import shutil
+import subprocess
 import tempfile
 from typing import Any
 
@@ -12,6 +15,7 @@ from lxm3.xm_cluster import artifacts
 from lxm3.xm_cluster import config as config_lib
 from lxm3.xm_cluster import executable_specs as cluster_executable_specs
 from lxm3.xm_cluster import executables as cluster_executables
+from lxm3.xm_cluster.console import console
 from lxm3.xm_cluster.packaging import archive_builder
 from lxm3.xm_cluster.packaging import container_builder
 
@@ -44,6 +48,70 @@ def _package_python_package(
         entrypoint_command=entrypoint_cmd,
         resource_uri=deployed_archive_path,
         name=py_package.name,
+        args=packageable.args,
+        env_vars=packageable.env_vars,
+    )
+
+
+@contextlib.contextmanager
+def _chdir(directory):
+    cwd = os.getcwd()
+    os.chdir(directory)
+    yield
+    os.chdir(cwd)
+
+
+def _package_pex_binary(
+    spec: cluster_executable_specs.PexBinary,
+    packageable: xm.Packageable,
+    artifact_store: artifacts.ArtifactStore,
+):
+    pex_executable = shutil.which("pex")
+    pex_name = f"{spec.name}.pex"
+
+    assert pex_executable is not None, "pex executable not found"
+    with tempfile.TemporaryDirectory() as staging:
+        install_dir = os.path.join(staging, "install")
+        pex_path = os.path.join(install_dir, pex_name)
+        with _chdir(spec.path):
+            pex_options = []
+            for pkg in spec.packages:
+                pex_options.extend(["--package", pkg])
+            for pkg in spec.modules:
+                pex_options.extend(["--module", pkg])
+            pex_options.extend(["--inherit-path=fallback"])
+            pex_options.extend(["--entry-point", spec.entrypoint.module_name])
+            pex_options.extend(["--runtime-pex-root=./.pex"])
+            with console.status(f"Creating pex {pex_name}"):
+                pex_cmd = [pex_executable, "-o", pex_path, *pex_options]
+                console.log(f"Running pex command: {' '.join(pex_cmd)}")
+                subprocess.run(pex_cmd, check=True)
+
+            # Add resources to the archive
+            for resource in spec.dependencies:
+                for src, dst in resource.files:
+                    target_file = os.path.join(install_dir, dst)
+                    if not os.path.exists(os.path.dirname(target_file)):
+                        os.makedirs(os.path.dirname(target_file))
+                    if not os.path.exists(target_file):
+                        shutil.copy(src, target_file)
+                    else:
+                        raise ValueError(
+                            "Additional resource overwrites existing file: %s", src
+                        )
+
+            local_archive_path = shutil.make_archive(
+                os.path.join(staging, spec.name), "zip", install_dir
+            )
+            push_archive_name = os.path.basename(local_archive_path)
+            deployed_archive_path = artifact_store.deploy_resource_archive(
+                local_archive_path, push_archive_name
+            )
+
+    return cluster_executables.Command(
+        entrypoint_command=f"./{pex_name}",
+        resource_uri=deployed_archive_path,
+        name=spec.name,
         args=packageable.args,
         env_vars=packageable.env_vars,
     )
@@ -173,6 +241,7 @@ def _throw_on_unknown_executable(
 
 _PACKAGING_ROUTER = pattern_matching.match(
     _package_python_package,
+    _package_pex_binary,
     _package_universal_package,
     _package_pdm_project,
     _package_python_container,
