@@ -147,7 +147,7 @@ class RemoteArtifactStore(ArtifactStore):
     ):
         if connect_kwargs is None:
             connect_kwargs = {}
-        fs = SFTPFileSystem("sftp", host=hostname, username=user, **connect_kwargs)  # type: ignore
+        fs = SFTPFileSystem(host=hostname, username=user, **connect_kwargs)  # type: ignore
         # Normalize the storage root to an absolute path.
         self._host = hostname
         self._user = user
