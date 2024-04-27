@@ -2,11 +2,14 @@ import os
 import shutil
 import subprocess
 import sys
+import textwrap
 import unittest
 import zipfile
 from unittest import mock
 from unittest.mock import patch
 
+import fsspec
+import pytest
 from absl.testing import absltest
 from absl.testing import parameterized
 
@@ -35,75 +38,59 @@ def is_docker_installed():
 
 class JobScriptBuilderTest(parameterized.TestCase):
     def test_env_vars(self):
-        env_var_str = job_script.JobScriptBuilder._create_env_vars(
-            [{"FOO": "BAR1"}, {"FOO": "BAR2"}]
+        env_var_str = job_script._create_env_vars(
+            [{"FOO": "BAR1"}, {"FOO": "BAR2"}], "LXM_TASK_ID", 0
         )
-        expected = """\
-FOO_0="BAR1"
-FOO_1="BAR2"
-FOO=$(eval echo \\$"FOO_$LXM_TASK_ID")
-export FOO"""
+        expected = textwrap.dedent("""\
+            FOO_0="BAR1"
+            FOO_1="BAR2"
+            FOO=$(eval echo \\$"FOO_$LXM_TASK_ID")
+            export FOO""")
         self.assertEqual(env_var_str, expected)
 
     def test_empty_env_vars(self):
-        self.assertEqual(job_script.JobScriptBuilder._create_env_vars([{}]), "")
+        self.assertEqual(job_script._create_env_vars([{}], "LXM_TASK_ID", 0), "")
 
     def test_common_values(self):
-        env_var_str = job_script.JobScriptBuilder._create_env_vars(
-            [{"FOO": "BAR", "BAR": "1"}, {"FOO": "BAR", "BAR": "2"}]
+        env_var_str = job_script._create_env_vars(
+            [{"FOO": "BAR", "BAR": "1"}, {"FOO": "BAR", "BAR": "2"}], "LXM_TASK_ID", 0
         )
-        expected = """\
-export FOO="BAR"
-BAR_0="1"
-BAR_1="2"
-BAR=$(eval echo \\$"BAR_$LXM_TASK_ID")
-export BAR"""
+        expected = textwrap.dedent("""\
+            export FOO="BAR"
+            BAR_0="1"
+            BAR_1="2"
+            BAR=$(eval echo \\$"BAR_$LXM_TASK_ID")
+            export BAR""")
         self.assertEqual(env_var_str, expected)
 
     def test_different_keys(self):
         with self.assertRaises(ValueError):
-            job_script.JobScriptBuilder._create_env_vars(
-                [{"FOO": "BAR1"}, {"BAR": "BAR2"}]
+            job_script._create_env_vars(
+                [{"FOO": "BAR1"}, {"BAR": "BAR2"}], "LXM_TASK_ID", 0
             )
 
     def test_args(self):
-        args_str = job_script.JobScriptBuilder._create_args(
-            [["--seed=1", "--task=1"], ["--seed=2", "--task=2"]]
+        args_str = job_script._create_args(
+            [["--seed=1", "--task=1"], ["--seed=2", "--task=2"]], "LXM_TASK_ID", 0
         )
-        expected = """\
-TASK_CMD_ARGS_0="--seed=1 --task=1"
-TASK_CMD_ARGS_1="--seed=2 --task=2"
-TASK_CMD_ARGS=$(eval echo \\$"TASK_CMD_ARGS_$LXM_TASK_ID")
-eval set -- $TASK_CMD_ARGS"""
+        expected = textwrap.dedent("""\
+            TASK_CMD_ARGS_0="--seed=1 --task=1"
+            TASK_CMD_ARGS_1="--seed=2 --task=2"
+            TASK_CMD_ARGS=$(eval echo \\$"TASK_CMD_ARGS_$LXM_TASK_ID")
+            eval set -- $TASK_CMD_ARGS""")
         self.assertEqual(args_str, expected)
 
     def test_empty_args(self):
-        self.assertEqual(job_script.JobScriptBuilder._create_args([]), "")
+        self.assertEqual(job_script._create_args([], "LXM_TASK_ID", 0), "")
         self.assertEqual(
-            job_script.JobScriptBuilder._create_args([[]]),
-            """\
-TASK_CMD_ARGS_0=""
-TASK_CMD_ARGS=$(eval echo \\$"TASK_CMD_ARGS_$LXM_TASK_ID")
-eval set -- $TASK_CMD_ARGS""",
-        )
-
-    def test_get_additional_env(self):
-        job_env = {"FOO": "FOO_0", "OVERRIDE": "OVERRIDE"}
-
-        self.assertEqual(
-            job_script.JobScriptBuilder._get_additional_env(
-                job_env, {"FOO": "FOO_HOST", "BAR": "BAR"}
+            job_script._create_args([[]], "LXM_TASK_ID", 0),
+            textwrap.dedent(
+                """\
+                TASK_CMD_ARGS_0=""
+                TASK_CMD_ARGS=$(eval echo \\$"TASK_CMD_ARGS_$LXM_TASK_ID")
+                eval set -- $TASK_CMD_ARGS""",
             ),
-            {"BAR": "BAR"},
         )
-
-    def test_additional_bindings(self):
-        job_binds = {"/c": "/b", "/d": "/e"}
-        overrides = {"/a": "/b", "/foo": "/bar"}
-        additional_binds = job_script.JobScriptBuilder._get_additional_binds(
-            job_binds, overrides
-        )
-        self.assertEqual(additional_binds, {"/foo": "/bar"})
 
 
 class LocalExecutionTest(parameterized.TestCase):
@@ -126,7 +113,7 @@ class LocalExecutionTest(parameterized.TestCase):
         container = staging_dir.create_file(container_name)
 
         deploy_dir = self.create_tempdir(name="deploy")
-        executable = executables.Command(
+        executable = executables.AppBundle(
             name="test",
             entrypoint_command="echo hello",
             resource_uri=archive.full_path,
@@ -134,7 +121,9 @@ class LocalExecutionTest(parameterized.TestCase):
         )
         executor = executors.Local()
         job = xm.Job(executable, executor, name="test")
-        artifact = artifacts.LocalArtifactStore(deploy_dir.full_path)
+        artifact = artifacts.ArtifactStore(
+            fsspec.filesystem("local"), deploy_dir.full_path
+        )
         settings = config.LocalSettings()
         client = local.LocalClient(settings, artifact)
         with mock.patch.object(subprocess, "run"):
@@ -167,11 +156,9 @@ class LocalExecutionTest(parameterized.TestCase):
             info.external_attr = 0o777 << 16  # give full access to included file
             z.writestr(
                 info,
-                """\
-#!/usr/bin/env bash
-echo $@ $FOO""",
+                "#!/usr/bin/env bash\necho $@ $FOO",
             )
-        executable = xm_cluster.Command(
+        executable = xm_cluster.AppBundle(
             "foo", "./entrypoint.sh", resource_uri=tmpf.full_path
         )
         job = xm.Job(
@@ -192,11 +179,9 @@ echo $@ $FOO""",
             info.external_attr = 0o777 << 16  # give full access to included file
             z.writestr(
                 info,
-                """\
-#!/usr/bin/env bash
-echo $@ $FOO""",
+                "#!/usr/bin/env bash\necho $@ $FOO",
             )
-        executable = xm_cluster.Command(
+        executable = xm_cluster.AppBundle(
             "foo", "./entrypoint.sh", resource_uri=tmpf.full_path
         )
         job = xm_cluster.ArrayJob(
@@ -208,11 +193,11 @@ echo $@ $FOO""",
         builder = local.LocalJobScriptBuilder()
         job_script_content = builder.build(job, "foo", "/tmp")
         process = self._run_job_script(
-            job_script_content, env={builder.TASK_ID_VAR_NAME: "1"}
+            job_script_content, env={builder.ARRAY_TASK_ID: "1"}
         )
         self.assertEqual(process.stdout.decode("utf-8").strip(), "--seed=1 FOO_0")
         process = self._run_job_script(
-            job_script_content, env={builder.TASK_ID_VAR_NAME: "2"}
+            job_script_content, env={builder.ARRAY_TASK_ID: "2"}
         )
         self.assertEqual(process.stdout.decode("utf-8").strip(), "--seed=2 FOO_1")
 
@@ -223,38 +208,31 @@ echo $@ $FOO""",
             info.external_attr = 0o777 << 16  # give full access to included file
             z.writestr(
                 "run.py",
-                """\
-from absl import app
-from ml_collections import config_dict
-from ml_collections import config_flags
+                textwrap.dedent("""\
+                    from absl import app
+                    from ml_collections import config_dict
+                    from ml_collections import config_flags
 
-def _get_config():
-    config = config_dict.ConfigDict()
-    config.name = ""
-    return config
+                    def _get_config():
+                        config = config_dict.ConfigDict()
+                        config.name = ""
+                        return config
 
+                    _CONFIG = config_flags.DEFINE_config_dict("config", _get_config())
 
-_CONFIG = config_flags.DEFINE_config_dict("config", _get_config())
+                    def main(_):
+                        config = _CONFIG.value
+                        print(config.name)
 
-
-def main(_):
-    config = _CONFIG.value
-    print(config.name)
-
-if __name__ == "__main__":
-    config = _get_config()
-    app.run(main)
-
-""",
+                    if __name__ == "__main__":
+                        config = _get_config()
+                        app.run(main)"""),
             )
             z.writestr(
                 info,
-                """\
-#!/usr/bin/env bash
-{} run.py $@
-""".format(sys.executable),
+                "#!/usr/bin/env bash\n{} run.py $@\n".format(sys.executable),
             )
-        executable = xm_cluster.Command(
+        executable = xm_cluster.AppBundle(
             "foo", "./entrypoint.sh", resource_uri=tmpf.full_path
         )
         job = xm_cluster.ArrayJob(
@@ -265,9 +243,10 @@ if __name__ == "__main__":
         )
         builder = local.LocalJobScriptBuilder()
         job_script_content = builder.build(job, "foo", "/tmp")
-        process = self._run_job_script(job_script_content, env={"SGE_TASK_ID": "1"})
+        process = self._run_job_script(job_script_content, env={"LOCAL_TASK_ID": "1"})
         self.assertEqual(process.stdout.decode("utf-8").strip(), "train[:90%]")
 
+    @pytest.mark.integration
     @unittest.skipIf(not is_singularity_installed(), "Singularity is not installed")
     def test_singularity(self):
         tmpf = self.create_tempfile("test.zip")
@@ -276,26 +255,31 @@ if __name__ == "__main__":
             info.external_attr = 0o777 << 16  # give full access to included file
             z.writestr(
                 info,
-                """\
-#!/usr/bin/env bash
-echo $FOO""",
+                "#!/usr/bin/env bash\necho $FOO",
             )
 
-        executable = xm_cluster.Command(
+        executable = xm_cluster.AppBundle(
             "test",
             "./entrypoint.sh",
             resource_uri=tmpf.full_path,
             singularity_image="docker://python:3.10-slim",
         )
         job = xm_cluster.ArrayJob(
-            executable, executor=xm_cluster.Local(), env_vars=[{"FOO": "FOO_0"}]
+            executable,
+            executor=xm_cluster.Local(
+                singularity_options=xm_cluster.SingularityOptions(
+                    extra_options=["--containall"]
+                )
+            ),
+            env_vars=[{"FOO": "FOO_0"}],
         )
         job_script_content = local.LocalJobScriptBuilder().build(job, "foo", "/tmp")
         process = self._run_job_script(
-            job_script_content, env={local.LocalJobScriptBuilder.TASK_ID_VAR_NAME: "1"}
+            job_script_content, env={local.LocalJobScriptBuilder.ARRAY_TASK_ID: "1"}
         )
         self.assertEqual(process.stdout.decode("utf-8").strip(), "FOO_0")
 
+    @pytest.mark.integration
     @unittest.skipIf(not is_docker_installed(), "Docker is not installed")
     def test_docker_image(self):
         tmpf = self.create_tempfile("test.zip")
@@ -304,12 +288,10 @@ echo $FOO""",
             info.external_attr = 0o777 << 16  # give full access to included file
             z.writestr(
                 info,
-                """\
-#!/usr/bin/env bash
-echo $FOO""",
+                "#!/usr/bin/env bash\necho $FOO\n",
             )
 
-        executable = xm_cluster.Command(
+        executable = xm_cluster.AppBundle(
             "test",
             "./entrypoint.sh",
             resource_uri=tmpf.full_path,
@@ -320,7 +302,7 @@ echo $FOO""",
         )
         job_script_content = local.LocalJobScriptBuilder().build(job, "foo", "/tmp")
         process = self._run_job_script(
-            job_script_content, env={local.LocalJobScriptBuilder.TASK_ID_VAR_NAME: "1"}
+            job_script_content, env={local.LocalJobScriptBuilder.ARRAY_TASK_ID: "1"}
         )
         self.assertEqual(process.stdout.decode("utf-8").strip(), "FOO_0")
 
@@ -360,7 +342,7 @@ class GridEngineExecutionTest(parameterized.TestCase):
         self.assertIn("#$ -tc 2", header)
 
     def test_setup_cmds(self):
-        executable = executables.Command(
+        executable = executables.AppBundle(
             name="test",
             entrypoint_command="echo hello",
             resource_uri="",
@@ -372,8 +354,10 @@ class GridEngineExecutionTest(parameterized.TestCase):
             "_is_gpu_requested",
             return_value=True,
         ):
-            setup_cmds = gridengine.GridEngineJobScriptBuilder._create_setup_cmds(
-                executable, executor
+            setup_cmds = (
+                gridengine.GridEngineJobScriptBuilder._create_job_script_prologue(
+                    executable, executor
+                )
             )
         self.assertIn("nvidia-smi", setup_cmds)
         self.assertIn("module load module1", setup_cmds)
@@ -388,7 +372,7 @@ class GridEngineExecutionTest(parameterized.TestCase):
         container = staging_dir.create_file(container_name)
 
         deploy_dir = self.create_tempdir(name="deploy")
-        executable = executables.Command(
+        executable = executables.AppBundle(
             name="test",
             entrypoint_command="echo hello",
             resource_uri=archive.full_path,
@@ -396,7 +380,9 @@ class GridEngineExecutionTest(parameterized.TestCase):
         )
         executor = executors.GridEngine()
         job = xm.Job(executable, executor, name="test")
-        artifact = artifacts.LocalArtifactStore(deploy_dir.full_path)
+        artifact = artifacts.ArtifactStore(
+            fsspec.filesystem("local"), deploy_dir.full_path
+        )
         settings = config.ClusterSettings()
         client = gridengine.GridEngineClient(settings, artifact)
         with mock.patch.object(
@@ -427,7 +413,7 @@ class SlurmExecutionTest(parameterized.TestCase):
         self.assertIn("#SBATCH --array=1-10", header)
 
     def test_setup_cmds(self):
-        executable = executables.Command(
+        executable = executables.AppBundle(
             name="test",
             entrypoint_command="echo hello",
             resource_uri="",
@@ -439,7 +425,7 @@ class SlurmExecutionTest(parameterized.TestCase):
             "_is_gpu_requested",
             return_value=True,
         ):
-            setup_cmds = slurm.SlurmJobScriptBuilder._create_setup_cmds(
+            setup_cmds = slurm.SlurmJobScriptBuilder._create_job_script_prologue(
                 executable, executor
             )
         self.assertIn("module load module1", setup_cmds)
@@ -454,7 +440,7 @@ class SlurmExecutionTest(parameterized.TestCase):
         container = staging_dir.create_file(container_name)
 
         deploy_dir = self.create_tempdir(name="deploy")
-        executable = executables.Command(
+        executable = executables.AppBundle(
             name="test",
             entrypoint_command="echo hello",
             resource_uri=archive.full_path,
@@ -462,7 +448,9 @@ class SlurmExecutionTest(parameterized.TestCase):
         )
         executor = executors.Slurm()
         job = xm.Job(executable, executor, name="test")
-        artifact = artifacts.LocalArtifactStore(deploy_dir.full_path)
+        artifact = artifacts.ArtifactStore(
+            fsspec.filesystem("local"), deploy_dir.full_path
+        )
         settings = config.ClusterSettings()
         client = slurm.SlurmClient(settings, artifact)
         with mock.patch.object(slurm_cluster.SlurmCluster, "launch") as mock_launch:

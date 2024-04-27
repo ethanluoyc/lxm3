@@ -2,6 +2,7 @@
 """This showcases how to create a launcher script without ever
 requiring the user to manually build a singularity image.
 """
+
 import subprocess
 
 from absl import app

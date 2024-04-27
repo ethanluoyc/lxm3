@@ -8,7 +8,7 @@ from lxm3.xm_cluster.requirements import JobRequirements
 
 
 def _convert_time(
-    time: Optional[Union[str, datetime.datetime, int]]
+    time: Optional[Union[str, datetime.datetime, int]],
 ) -> Optional[datetime.timedelta]:
     if time is None:
         return None

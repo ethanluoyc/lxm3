@@ -1,17 +1,25 @@
-import abc
 import datetime
+import functools
 import os
-from typing import Any, Mapping, Optional
+import shutil
+from typing import Optional, Tuple
 
+import attr
 import fsspec
-import rich.progress
-import rich.syntax
-from fsspec.implementations.sftp import SFTPFileSystem
+from fsspec.implementations import local
+from fsspec.implementations import sftp
 
-from lxm3.xm_cluster.console import console
+from lxm3.xm_cluster import config as config_lib
 
 
-class ArtifactStore(abc.ABC):
+@attr.s(auto_attribs=True)
+class FileInfo:
+    path: str
+    size: int
+    time_modified: datetime.datetime
+
+
+class ArtifactStore:
     def __init__(
         self,
         filesystem: fsspec.AbstractFileSystem,
@@ -22,184 +30,119 @@ class ArtifactStore(abc.ABC):
             self._storage_root = os.path.join(staging_directory, "projects", project)
         else:
             self._storage_root = staging_directory
-        self._fs = filesystem
+        self._filesystem = filesystem
         self._initialize()
 
-    def _initialize(self):
-        pass
+    @property
+    def filesystem(self):
+        return self._filesystem
 
-    def job_path(self, job_name: str):
-        return os.path.join(self._storage_root, "jobs", job_name)
-
-    def job_script_path(self, job_name: str):
-        return os.path.join(self.job_path(job_name), "job.sh")
-
-    def job_log_path(self, job_name: str):
-        return os.path.join(os.path.join(self._storage_root, "logs", job_name))
-
-    def singularity_image_path(self, image_name: str):
-        return os.path.join(self._storage_root, "containers", image_name)
-
-    def archive_path(self, archive_name: str):
-        return os.path.join(self._storage_root, "archives", archive_name)
-
-    def _should_update(self, src: str, dst: str) -> bool:
-        if not self._fs.exists(dst):
-            return True
-
-        local_stat = os.stat(src)
-        local_mtime = datetime.datetime.utcfromtimestamp(
-            local_stat.st_mtime
-        ).timestamp()
-        storage_stat = self._fs.info(dst)
-        storage_mtime = storage_stat["mtime"]
-
-        if isinstance(storage_mtime, datetime.datetime):
-            storage_mtime = storage_mtime.timestamp()
-
-        if local_stat.st_size != storage_stat["size"]:
-            return True
-
-        if int(local_mtime) > int(storage_mtime):
-            return True
-
-        return False
-
-    def _put_content(self, dst, content):
-        self._fs.makedirs(os.path.dirname(dst), exist_ok=True)
-
-        with self._fs.open(dst, "wt") as f:
-            f.write(content)
-
-    def _put_file(self, local_filename, dst):
-        self._fs.makedirs(os.path.dirname(dst), exist_ok=True)
-        self._fs.put(local_filename, dst)
-
-    def deploy_job_scripts(self, job_name, job_script):
-        job_path = self.job_path(job_name)
-        job_log_path = self.job_log_path(job_name)
-
-        self._fs.makedirs(job_path, exist_ok=True)
-        self._fs.makedirs(job_log_path, exist_ok=True)
-        self._put_content(self.job_script_path(job_name), job_script)
-        console.log(f"Created job script {self.job_script_path(job_name)}")
-
-    def deploy_singularity_container(self, lpath, image_name):
-        assert "/" not in image_name
-        deploy_container_path = self.singularity_image_path(image_name)
-        should_update = self._should_update(lpath, deploy_container_path)
-        if should_update:
-            self._fs.makedirs(os.path.dirname(deploy_container_path), exist_ok=True)
-            self._put_file(lpath, deploy_container_path)
-            console.log(f"Deployed Singularity container to {deploy_container_path}")
-        else:
-            console.log(f"Container {deploy_container_path} exists, skip upload.")
-        return deploy_container_path
-
-    def deploy_resource_archive(self, lpath, archive_name):
-        assert "/" not in archive_name
-        deploy_archive_path = self.archive_path(archive_name)
-
-        should_update = self._should_update(lpath, deploy_archive_path)
-        if should_update:
-            self._put_file(lpath, deploy_archive_path)
-            console.log(f"Deployed archive to {deploy_archive_path}")
-        else:
-            console.log(f"Archive {deploy_archive_path} exists, skipping upload.")
-        return deploy_archive_path
-
-
-class LocalArtifactStore(ArtifactStore):
-    def __init__(self, staging_directory: str, project=None):
-        staging_directory = os.path.abspath(os.path.expanduser(staging_directory))
-        super().__init__(fsspec.filesystem("file"), staging_directory, project)
+    @property
+    def storage_root(self):
+        return self._storage_root
 
     def _initialize(self):
-        if not os.path.exists(self._storage_root):
-            self._fs.makedirs(self._storage_root)
-            # Create a .gitignore file to prevent git from tracking the directory
-            self._fs.write_text(os.path.join(self._storage_root, ".gitignore"), "*\n")
+        self.ensure_dir(".")
+        if not self.exists(".gitignore"):
+            self.put_text("*\n", ".gitignore")
 
-    def deploy_singularity_container(self, lpath, image_name):
-        deploy_container_path = self.singularity_image_path(image_name)
-        should_update = self._should_update(lpath, deploy_container_path)
-        if should_update:
-            self._fs.makedirs(os.path.dirname(deploy_container_path), exist_ok=True)
-            if os.path.exists(deploy_container_path):
-                os.unlink(deploy_container_path)
-            self._put_file(lpath, deploy_container_path)
-            console.log(f"Deployed Singularity container to {deploy_container_path}")
+    def get_file_info(self, path: str) -> FileInfo:
+        path = self.normalize_path(path)
+        info = self._filesystem.info(path)
+        size = info["size"]
+        mod_time = info["mtime"]
+        if not isinstance(mod_time, datetime.datetime):
+            mod_time = datetime.datetime.fromtimestamp(
+                info["mtime"], tz=datetime.timezone.utc
+            )
+        return FileInfo(path, size, mod_time)
+
+    def normalize_path(self, path: str) -> str:
+        assert not os.path.isabs(path)
+        return os.path.join(self._storage_root, path)
+
+    def exists(self, name: str) -> bool:
+        return self._filesystem.exists(self.normalize_path(name))
+
+    def ensure_dir(self, directory: str):
+        directory = self.normalize_path(directory)
+        return self._filesystem.makedirs(directory, exist_ok=True)
+
+    def put_file(self, lpath: str, rpath: str) -> str:
+        path = self.normalize_path(rpath)
+
+        self._filesystem.makedirs(os.path.dirname(path), exist_ok=True)
+        self._filesystem.put(lpath, path)
+
+        return path
+
+    def put_text(self, text: str, rpath: str) -> str:
+        path = self.normalize_path(rpath)
+
+        self._filesystem.makedirs(os.path.dirname(path), exist_ok=True)
+        self._filesystem.write_text(path, text)
+
+        return path
+
+    def put_fileobj(self, fileobj, rpath: str) -> str:
+        path = self.normalize_path(rpath)
+
+        self._filesystem.makedirs(os.path.dirname(path), exist_ok=True)
+
+        filesystem = self._filesystem
+        if isinstance(filesystem, local.LocalFileSystem):
+            with filesystem.open(path, "wb") as fout:
+                shutil.copyfileobj(fileobj, fout)
+        elif isinstance(filesystem, sftp.SFTPFileSystem):
+            filesystem.ftp.putfo(fileobj, path)
         else:
-            console.log(f"Container {deploy_container_path} exists, skip upload.")
-        return deploy_container_path
+            raise NotImplementedError()
 
+        return path
 
-class RemoteArtifactStore(ArtifactStore):
-    _fs: SFTPFileSystem
+    def should_update(self, lpath: str, rpath: str) -> Tuple[bool, str]:
+        if not self.exists(rpath):
+            return True, "file does not exist"
 
-    def __init__(
-        self,
-        hostname: str,
-        user: Optional[str],
-        staging_directory: str,
-        project: Optional[str] = None,
-        connect_kwargs: Optional[Mapping[str, Any]] = None,
-    ):
-        if connect_kwargs is None:
-            connect_kwargs = {}
-        fs = SFTPFileSystem(host=hostname, username=user, **connect_kwargs)  # type: ignore
-        # Normalize the storage root to an absolute path.
-        self._host = hostname
-        self._user = user
-        if not os.path.isabs(staging_directory):
-            staging_directory = fs.ftp.normalize(staging_directory)
-        super().__init__(fs, staging_directory, project)
-
-    def deploy_singularity_container(self, lpath, image_name):
-        assert "/" not in image_name
-        deploy_container_path = self.singularity_image_path(image_name)
-        should_update = self._should_update(lpath, deploy_container_path)
-        if should_update:
-            with rich.progress.Progress(
-                rich.progress.TextColumn("[progress.description]{task.description}"),
-                rich.progress.BarColumn(),
-                rich.progress.TaskProgressColumn(),
-                rich.progress.TimeRemainingColumn(),
-                rich.progress.TransferSpeedColumn(),
-                console=console,
-            ) as progress:
-                self._fs.makedirs(os.path.dirname(deploy_container_path), exist_ok=True)
-
-                task = progress.add_task(f"Uploading {os.path.basename(lpath)}")
-
-                def callback(transferred_bytes: int, total_bytes: int):
-                    progress.update(
-                        task, completed=transferred_bytes, total=total_bytes
-                    )
-
-                self._fs.ftp.put(
-                    lpath,
-                    deploy_container_path,
-                    callback=callback,
-                    confirm=True,
-                )
-                progress.update(task, description="Done!")
-
-        else:
-            console.log(f"Container {deploy_container_path} exists, skip upload.")
-        return deploy_container_path
-
-
-def create_artifact_store(
-    storage_root: str,
-    hostname: Optional[str] = None,
-    user: Optional[str] = None,
-    project: Optional[str] = None,
-    connect_kwargs=None,
-) -> ArtifactStore:
-    if hostname is None:
-        return LocalArtifactStore(storage_root, project=project)
-    else:
-        return RemoteArtifactStore(
-            hostname, user, storage_root, project=project, connect_kwargs=connect_kwargs
+        local_stat = os.stat(lpath)
+        local_size = local_stat.st_size
+        local_mtime = datetime.datetime.fromtimestamp(
+            local_stat.st_atime, tz=datetime.timezone.utc
         )
+        remote_file_info = self.get_file_info(rpath)
+
+        if local_size != remote_file_info.size:
+            return True, "file size mismatch"
+
+        if local_mtime > remote_file_info.time_modified:
+            return True, "local file is newer"
+
+        return False, ""
+
+
+@functools.lru_cache(maxsize=None)
+def get_local_artifact_store() -> ArtifactStore:
+    default = config_lib.default()
+    settings = default.local_settings()
+    project = default.project()
+    filesystem = fsspec.filesystem("file")
+    storage_root = os.path.abspath(os.path.expanduser(settings.storage_root))
+    return ArtifactStore(filesystem, storage_root, project=project)
+
+
+@functools.lru_cache(maxsize=None)
+def get_cluster_artifact_store() -> ArtifactStore:
+    default = config_lib.default()
+    settings = default.cluster_settings()
+    project = default.project()
+
+    if settings.hostname is None:
+        filesystem = fsspec.filesystem("file")
+        storage_root = os.path.abspath(os.path.expanduser(settings.storage_root))
+    else:
+        filesystem = sftp.SFTPFileSystem(
+            host=settings.hostname, username=settings.user, **settings.ssh_config
+        )
+        storage_root = filesystem.ftp.normalize(settings.storage_root)
+
+    return ArtifactStore(filesystem, staging_directory=storage_root, project=project)

@@ -1,6 +1,6 @@
 import functools
 import os
-from typing import Any, Dict, Optional, Protocol
+from typing import Any, Optional, Protocol
 
 import appdirs
 import tomlkit
@@ -19,24 +19,10 @@ class SingularitySettings:
     def __repr__(self) -> str:
         return repr(self._data)
 
-    @property
-    def binds(self) -> Dict[str, str]:
-        binds = self._data.get("binds", [])
-        return {bind["src"]: bind["dest"] for bind in binds}
-
-    @property
-    def env(self) -> Dict[str, str]:
-        return self._data.get("env", {})
-
 
 class ExecutionSettings(Protocol):
     @property
-    def env(self) -> Dict[str, str]:
-        ...
-
-    @property
-    def singularity(self) -> SingularitySettings:
-        ...
+    def singularity(self) -> SingularitySettings: ...
 
 
 class LocalSettings(ExecutionSettings):
@@ -49,10 +35,6 @@ class LocalSettings(ExecutionSettings):
     @property
     def storage_root(self) -> str:
         return self._data["storage"]["staging"]
-
-    @property
-    def env(self) -> Dict[str, str]:
-        return self._data.get("env", {})
 
     @property
     def singularity(self) -> SingularitySettings:
@@ -98,10 +80,6 @@ class ClusterSettings(ExecutionSettings):
         return connect_kwargs
 
     @property
-    def env(self) -> Dict[str, str]:
-        return self._data.get("env", {})
-
-    @property
     def singularity(self) -> SingularitySettings:
         return SingularitySettings(self._data.get("singularity", {}))
 
@@ -139,6 +117,11 @@ class Config:
     def default_cluster(self) -> str:
         cluster = os.environ.get("LXM_CLUSTER", None)
         if cluster is None:
+            if not self._data.get("clusters", None):
+                raise ValueError(
+                    "No cluster has been configured. You should create a configuration file "
+                    "in order to use the cluster execution backends."
+                )
             cluster = self._data["clusters"][0]["name"]
         return cluster
 
@@ -149,6 +132,16 @@ class Config:
             raise ValueError("Unknown cluster")
         cluster_config = clusters[location]
         return ClusterSettings(cluster_config)
+
+    @classmethod
+    def default(cls):
+        return cls(
+            {
+                "project": None,
+                "local": {"storage": {"staging": os.path.join(os.getcwd(), ".lxm")}},
+                "clusters": [],
+            }
+        )
 
 
 @functools.lru_cache()
@@ -174,4 +167,7 @@ def default() -> Config:
         logging.debug("Loading config from %s", cwd_path)
         return Config.from_file(user_config_path)
     else:
-        raise ValueError("Unable to load Config")
+        logging.info(
+            "Failed to load configuration. Creating a default configuration for local execution."
+        )
+        return Config.default()

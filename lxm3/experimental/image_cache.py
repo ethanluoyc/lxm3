@@ -44,9 +44,9 @@ from lxm3 import singularity
 
 def _log(message):
     # Consider moving this out
-    from lxm3.xm_cluster.console import console  # noqa
+    from lxm3.xm_cluster import console  # noqa
 
-    console.log(message, style="dim")
+    console.info(message, style="dim")
 
 
 @dataclasses.dataclass(frozen=True)

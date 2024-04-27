@@ -13,7 +13,7 @@ from lxm3.xm_cluster.executable_specs import PythonContainer
 from lxm3.xm_cluster.executable_specs import PythonPackage
 from lxm3.xm_cluster.executable_specs import SingularityContainer
 from lxm3.xm_cluster.executable_specs import UniversalPackage
-from lxm3.xm_cluster.executables import Command
+from lxm3.xm_cluster.executables import AppBundle
 from lxm3.xm_cluster.executors import DockerOptions
 from lxm3.xm_cluster.executors import GridEngine
 from lxm3.xm_cluster.executors import Local
@@ -22,6 +22,7 @@ from lxm3.xm_cluster.executors import Slurm
 from lxm3.xm_cluster.experiment import ClusterExperiment
 from lxm3.xm_cluster.experiment import ClusterWorkUnit
 from lxm3.xm_cluster.experiment import create_experiment
+from lxm3.xm_cluster.experiment import get_current_experiment
 from lxm3.xm_cluster.requirements import JobRequirements
 
 logging.getLogger("paramiko").setLevel(logging.WARNING)

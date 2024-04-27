@@ -66,6 +66,7 @@ dev = [
     "sphinx_nameko_theme",
     "black>=23.1.0",
     "ruff>=0.0.243",
+    "pytest-golden>=0.2.2",
 ]
 
 [tool.pdm.version]
@@ -80,27 +81,29 @@ test = "pytest lxm3 tests"
 test-cov = "pytest --cov=lxm3 --cov-report=xml tests"
 cov = {composite = ["test-cov", "coverage report"]}
 docs = "sphinx-build -b html docs docs/build/html -j auto"
-lint.shell = "ruff ."
+lint.shell = "ruff check ."
 fmt.shell = "ruff format ."
 
 [tool.ruff]
+exclude = ["_vendor", "xm", ".venv"]
+
+[tool.ruff.lint]
 select = [
   "E",   # pycodestyle
   "F",   # pyflakes
   "I",   # isort
 ]
-exclude = ["_vendor", "xm", ".venv"]
 ignore = ["E501"]
 
-[tool.ruff.extend-per-file-ignores]
+[tool.ruff.lint.extend-per-file-ignores]
 "__init__.py" = ["F401"]
 
-[tool.ruff.isort]
+[tool.ruff.lint.isort]
 known-first-party = ["lxm3"]
 force-single-line = true
 single-line-exclusions = ["typing"]
 
-[tool.ruff.flake8-tidy-imports]
+[tool.ruff.lint.flake8-tidy-imports]
 ban-relative-imports = "all"
 
 [tool.coverage.paths]
@@ -119,6 +122,10 @@ exclude_lines = [
   "no cov",
   "if __name__ == .__main__.:",
   "if TYPE_CHECKING:",
+]
+omit = [
+  "lxm3/experimental/*",
+  "lxm3/xm_cluster/packaging/digest_util.py"
 ]
 
 [tool.pyright]
@@ -145,6 +152,11 @@ testpaths = [
   "tests",
   "lxm3/_vendor",
 ]
+markers = [
+  "integration",
+]
+addopts = "--import-mode=importlib"
+enable_assertion_pass_hook = true
 filterwarnings = [
   # xm/core_test.py
   "ignore:cannot collect test class 'TestError':pytest.PytestCollectionWarning",

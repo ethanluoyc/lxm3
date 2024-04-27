@@ -6,6 +6,6 @@ def pytest_configure(config):
     flags.FLAGS.mark_as_parsed()
 
 
-def pytest_ignore_collect(path, config):
-    if path.isfile() and path.islink():
+def pytest_ignore_collect(collection_path, config):
+    if collection_path.is_file() and collection_path.is_symlink():
         return True

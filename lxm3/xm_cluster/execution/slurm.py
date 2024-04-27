@@ -9,16 +9,17 @@ from lxm3.clusters import slurm
 from lxm3.xm_cluster import array_job
 from lxm3.xm_cluster import artifacts
 from lxm3.xm_cluster import config as config_lib
+from lxm3.xm_cluster import console
 from lxm3.xm_cluster import executables
 from lxm3.xm_cluster import executors
-from lxm3.xm_cluster.console import console
 from lxm3.xm_cluster.execution import job_script_builder
 
 
 class SlurmJobScriptBuilder(job_script_builder.JobScriptBuilder[executors.Slurm]):
-    TASK_OFFSET = 1
+    ARRAY_TASK_ID = "SLURM_ARRAY_TASK_ID"
+    ARRAY_TASK_OFFSET = 1
     JOB_SCRIPT_SHEBANG = "#!/usr/bin/bash -l"
-    TASK_ID_VAR_NAME = "SLURM_ARRAY_TASK_ID"
+    JOB_ENV_PATTERN = "^(SLURM_)"
 
     @classmethod
     def _is_gpu_requested(cls, executor: executors.Slurm) -> bool:
@@ -26,25 +27,25 @@ class SlurmJobScriptBuilder(job_script_builder.JobScriptBuilder[executors.Slurm]
         return True  # TODO
 
     @classmethod
-    def _create_setup_cmds(cls, executable, executor: executors.Slurm) -> str:
-        cmds = ["echo >&2 INFO[$(basename $0)]: Running on host $(hostname)"]
+    def _create_job_script_prologue(cls, executable, executor: executors.Slurm) -> str:
+        cmds = ['echo >&2 "INFO[$(basename "$0")]: Running on host $(hostname)"']
 
         for module in executor.modules:
             cmds.append(f"module load {module}")
         if cls._is_gpu_requested(executor):
             cmds.append(
-                "echo >&2 INFO[$(basename $0)]: CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
+                'echo >&2 "INFO[$(basename "$0")]: CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"'
             )
             # cmds.append("nvidia-smi")
 
         if executable.singularity_image is not None:
             cmds.append(
-                "echo >&2 INFO[$(basename $0)]: Singularity version: $(singularity --version)"
+                'echo >&2 "INFO[$(basename "$0")]: Singularity version: $(singularity --version)"'
             )
         return "\n".join(cmds)
 
     @classmethod
-    def _create_job_header(
+    def _create_job_script_header(
         cls,
         executor: executors.Slurm,
         num_array_tasks: Optional[int],
@@ -57,10 +58,10 @@ class SlurmJobScriptBuilder(job_script_builder.JobScriptBuilder[executors.Slurm]
         return job_header
 
     def build(
-        self, job: job_script_builder.ClusterJob, job_name: str, job_log_dir: str
+        self, job: job_script_builder.JobType, job_name: str, job_log_dir: str
     ) -> str:
         assert isinstance(job.executor, executors.Slurm)
-        assert isinstance(job.executable, executables.Command)
+        assert isinstance(job.executable, executables.AppBundle)
         return super().build(job, job_name, job_log_dir)
 
 
@@ -89,72 +90,54 @@ class SlurmClient:
 
     def __init__(
         self,
-        settings: Optional[config_lib.ClusterSettings] = None,
-        artifact_store: Optional[artifacts.ArtifactStore] = None,
+        settings: config_lib.ClusterSettings,
+        artifact_store: artifacts.ArtifactStore,
     ) -> None:
-        if settings is None:
-            settings = config_lib.default().cluster_settings()
         self._settings = settings
-
-        if artifact_store is None:
-            project = config_lib.default().project()
-            artifact_store = artifacts.create_artifact_store(
-                settings.storage_root,
-                hostname=settings.hostname,
-                user=settings.user,
-                project=project,
-                connect_kwargs=settings.ssh_config,
-            )
         self._artifact_store = artifact_store
 
         self._cluster = slurm.SlurmCluster(
-            hostname=self._settings.hostname,
-            username=self._settings.user,
+            hostname=self._settings.hostname, username=self._settings.user
         )
 
-    def launch(self, job_name: str, job: job_script_builder.ClusterJob):
+    def launch(self, job_name: str, job: job_script_builder.JobType):
         job_name = re.sub("\\W", "_", job_name)
-        job_script_dir = self._artifact_store.job_path(job_name)
-        job_log_dir = self._artifact_store.job_log_path(job_name)
+        job_log_dir = job_script_builder.job_log_path(job_name)
+        self._artifact_store.ensure_dir(job_log_dir)
+        job_log_dir = self._artifact_store.normalize_path(job_log_dir)
+
         builder = self.builder_cls(self._settings)
         job_script_content = builder.build(job, job_name, job_log_dir)
-
-        self._artifact_store.deploy_job_scripts(job_name, job_script_content)
-        job_script_path = os.path.join(
-            job_script_dir, job_script_builder.JOB_SCRIPT_NAME
+        job_script_path = self._artifact_store.put_text(
+            job_script_content, job_script_builder.job_script_path(job_name)
         )
 
         if isinstance(job, array_job.ArrayJob):
             num_jobs = len(job.env_vars)
         else:
             num_jobs = 1
-        console.log(f"Launching {num_jobs} job on {self._settings.hostname}")
+        console.info(f"Launching {num_jobs} job on {self._settings.hostname}")
         job_id = self._cluster.launch(job_script_path)
-        console.log(f"Successfully launched job {job_id}")
+        console.info(f"Successfully launched job {job_id}")
+        self._artifact_store.put_text(str(job_id), f"jobs/{job_name}/job_id")
 
         if num_jobs > 1:
             job_ids = [f"{job_id}_{i}" for i in range(num_jobs)]
         else:
             job_ids = [f"{job_id}"]
         handles = [SlurmHandle(j) for j in job_ids]
-        self._save_job_id(job_script_path, str(job_id))
 
         return handles
-
-    def _save_job_id(self, job_script_path: str, job_id: str):
-        self._artifact_store._fs.write_text(
-            os.path.join(os.path.dirname(job_script_path), "job_id"), f"{job_id}\n"
-        )
 
 
 @functools.lru_cache()
 def client() -> SlurmClient:
-    return SlurmClient()
+    settings = config_lib.default().cluster_settings()
+    artifact_store = artifacts.get_cluster_artifact_store()
+    return SlurmClient(settings, artifact_store)
 
 
-async def launch(
-    job_name: str, job: job_script_builder.ClusterJob
-) -> List[SlurmHandle]:
+async def launch(job_name: str, job: job_script_builder.JobType) -> List[SlurmHandle]:
     if isinstance(job, array_job.ArrayJob):
         jobs = [job]  # type: ignore
     elif isinstance(job, xm.JobGroup):

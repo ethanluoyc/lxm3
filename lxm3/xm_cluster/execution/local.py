@@ -14,9 +14,9 @@ from lxm3 import xm
 from lxm3.xm_cluster import array_job as array_job_lib
 from lxm3.xm_cluster import artifacts
 from lxm3.xm_cluster import config as config_lib
+from lxm3.xm_cluster import console
 from lxm3.xm_cluster import executables
 from lxm3.xm_cluster import executors
-from lxm3.xm_cluster.console import console
 from lxm3.xm_cluster.execution import job_script_builder
 
 _LOCAL_EXECUTOR: Optional[concurrent.futures.ThreadPoolExecutor] = None
@@ -27,7 +27,7 @@ def local_executor():
     if _LOCAL_EXECUTOR is None:
         _LOCAL_EXECUTOR = concurrent.futures.ThreadPoolExecutor(1)
 
-        def shutdown():
+        def shutdown(*args, **kwargs):
             if _LOCAL_EXECUTOR is not None:
                 logging.debug("Shutting down local executor...")
                 _LOCAL_EXECUTOR.shutdown()
@@ -37,29 +37,30 @@ def local_executor():
 
 
 class LocalJobScriptBuilder(job_script_builder.JobScriptBuilder[executors.Local]):
-    TASK_OFFSET = 1
+    ARRAY_TASK_ID = "LOCAL_TASK_ID"
+    ARRAY_TASK_OFFSET = 1
     JOB_SCRIPT_SHEBANG = "#!/usr/bin/env bash"
-    TASK_ID_VAR_NAME = "LOCAL_TASK_ID"
+    JOB_ENV_PATTERN = "^(LOCAL_TASK_ID)"
 
     @classmethod
     def _is_gpu_requested(cls, executor: executors.Local) -> bool:
         return shutil.which("nvidia-smi") is not None
 
     @classmethod
-    def _create_setup_cmds(
-        cls, executable: executables.Command, executor: executors.Local
+    def _create_job_script_prologue(
+        cls, executable: executables.AppBundle, executor: executors.Local
     ) -> str:
         del executor
-        cmds = ["echo >&2 INFO[$(basename $0)]: Running on host $(hostname)"]
+        cmds = ['echo >&2 "INFO[$(basename "$0")]: Running on host $(hostname)"']
 
         if executable.singularity_image is not None:
             cmds.append(
-                "echo >&2 INFO[$(basename $0)]: Singularity version: $(singularity --version)"
+                'echo >&2 "INFO[$(basename "$0")]: Singularity version: $(singularity --version)"'
             )
         return "\n".join(cmds)
 
     @classmethod
-    def _create_job_header(
+    def _create_job_script_header(
         cls,
         executor: executors.Local,
         num_array_tasks: Optional[int],
@@ -70,10 +71,10 @@ class LocalJobScriptBuilder(job_script_builder.JobScriptBuilder[executors.Local]
         return ""
 
     def build(
-        self, job: job_script_builder.ClusterJob, job_name: str, job_log_dir: str
+        self, job: job_script_builder.JobType, job_name: str, job_log_dir: str
     ) -> str:
         assert isinstance(job.executor, executors.Local)
-        assert isinstance(job.executable, executables.Command)
+        assert isinstance(job.executable, executables.AppBundle)
         return super().build(job, job_name, job_log_dir)
 
 
@@ -102,32 +103,23 @@ class LocalClient:
 
     def __init__(
         self,
-        settings: Optional[config_lib.LocalSettings] = None,
-        artifact_store: Optional[artifacts.LocalArtifactStore] = None,
+        settings: config_lib.LocalSettings,
+        artifact_store: artifacts.ArtifactStore,
     ) -> None:
-        if settings is None:
-            config = config_lib.default()
-            settings = config.local_settings()
         self._settings = settings
-
-        if artifact_store is None:
-            config = config_lib.default()
-            artifact_store = artifacts.LocalArtifactStore(
-                self._settings.storage_root, project=config.project()
-            )
-
         self._artifact_store = artifact_store
 
-    def launch(self, job_name: str, job: job_script_builder.ClusterJob):
+    def launch(self, job_name: str, job: job_script_builder.JobType):
         job_name = re.sub("\\W", "_", job_name)
-        job_script_dir = self._artifact_store.job_path(job_name)
-        job_log_dir = self._artifact_store.job_log_path(job_name)
+
+        job_log_dir = job_script_builder.job_log_path(job_name)
+        self._artifact_store.ensure_dir(job_log_dir)
+        job_log_dir = self._artifact_store.normalize_path(job_log_dir)
+
         builder = self.builder_cls(self._settings)
         job_script_content = builder.build(job, job_name, job_log_dir)
-
-        self._artifact_store.deploy_job_scripts(job_name, job_script_content)
-        job_script_path = os.path.join(
-            job_script_dir, job_script_builder.JOB_SCRIPT_NAME
+        job_script_path = self._artifact_store.put_text(
+            job_script_content, job_script_builder.job_script_path(job_name)
         )
 
         if isinstance(job, array_job_lib.ArrayJob):
@@ -135,19 +127,21 @@ class LocalClient:
         else:
             num_jobs = 1
 
-        console.print(f"Launching {num_jobs} jobs locally...")
+        console.info(f"Launching {num_jobs} jobs locally...")
         handles = []
         for i in range(num_jobs):
 
             def task(i):
+                additional_env = {}
+                if isinstance(job, array_job_lib.ArrayJob):
+                    additional_env = {
+                        LocalJobScriptBuilder.ARRAY_TASK_ID: str(
+                            i + LocalJobScriptBuilder.ARRAY_TASK_OFFSET
+                        ),
+                    }
                 subprocess.run(
                     ["bash", job_script_path],
-                    env={
-                        **os.environ,
-                        LocalJobScriptBuilder.TASK_ID_VAR_NAME: str(
-                            i + LocalJobScriptBuilder.TASK_OFFSET
-                        ),
-                    },
+                    env={**os.environ, **additional_env},
                 )
 
             future = local_executor().submit(task, i)
@@ -158,10 +152,12 @@ class LocalClient:
 
 @functools.lru_cache()
 def client() -> LocalClient:
-    return LocalClient()
+    local_settings = config_lib.default().local_settings()
+    artifact_store = artifacts.get_local_artifact_store()
+    return LocalClient(local_settings, artifact_store)
 
 
-async def launch(job_name: str, job: job_script_builder.ClusterJob):
+async def launch(job_name: str, job: job_script_builder.JobType):
     if isinstance(job, array_job_lib.ArrayJob):
         jobs = [job]  # type: ignore
     elif isinstance(job, xm.JobGroup):

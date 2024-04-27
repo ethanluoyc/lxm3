@@ -10,14 +10,15 @@ from absl import logging
 
 from lxm3._vendor.xmanager import xm
 from lxm3._vendor.xmanager.xm import async_packager
+from lxm3._vendor.xmanager.xm import core
 from lxm3._vendor.xmanager.xm import id_predictor
 from lxm3._vendor.xmanager.xm import job_blocks
 from lxm3._vendor.xmanager.xm import pattern_matching as pm
 from lxm3.xm_cluster import array_job as array_job_lib
 from lxm3.xm_cluster import config as config_lib
+from lxm3.xm_cluster import console
 from lxm3.xm_cluster import metadata
 from lxm3.xm_cluster import packaging
-from lxm3.xm_cluster.console import console
 from lxm3.xm_cluster.execution import gridengine as gridengine_execution
 from lxm3.xm_cluster.execution import local as local_execution
 from lxm3.xm_cluster.execution import slurm as slurm_execution
@@ -175,7 +176,7 @@ class ClusterExperiment(xm.Experiment):
     def _wait_for_local_jobs(self, is_exit_abrupt: bool):
         if self._work_units:
             if any([wu._local_handles for wu in self._work_units]):
-                console.print(
+                console.info(
                     "Waiting for local jobs to complete. "
                     "Press Ctrl+C to terminate them and exit"
                 )
@@ -239,3 +240,12 @@ def create_experiment(experiment_title: str) -> ClusterExperiment:
         config.set_project(vcs.name)
 
     return ClusterExperiment(experiment_title, vcs=vcs)
+
+
+def get_current_experiment():
+    try:
+        return core._current_experiment.get()
+    except LookupError as e:
+        raise RuntimeError(
+            "get_current_experiment requires an experiment context"
+        ) from e

@@ -6,14 +6,14 @@ from traitlets.config import Config
 
 from lxm3.clusters import gridengine
 from lxm3.xm_cluster import config as config_lib
-from lxm3.xm_cluster.console import console
+from lxm3.xm_cluster import console
 
 
 def main(_):
     config = config_lib.default()
     cluster_settings = config.cluster_settings()
 
-    console.log(
+    console.info(
         "Creating a client to cluster "
         f"{cluster_settings.user}@{cluster_settings.hostname} ..."
     )

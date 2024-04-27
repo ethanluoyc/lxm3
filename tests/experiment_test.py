@@ -47,7 +47,7 @@ class ExperimentTest(parameterized.TestCase):
         super().setUp()
         staging = self.create_tempdir().full_path
         self._config = config_lib.Config.from_string(_TEST_CONFIG.format(staging))
-        self._executable = xm_cluster.Command(
+        self._executable = xm_cluster.AppBundle(
             name="dummy",
             entrypoint_command="./entrypint.sh",
             resource_uri="dummy",

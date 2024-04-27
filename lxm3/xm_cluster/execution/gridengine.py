@@ -10,22 +10,22 @@ from lxm3.clusters import gridengine
 from lxm3.xm_cluster import array_job
 from lxm3.xm_cluster import artifacts
 from lxm3.xm_cluster import config as config_lib
+from lxm3.xm_cluster import console
 from lxm3.xm_cluster import executables
 from lxm3.xm_cluster import executors
 from lxm3.xm_cluster import requirements as cluster_requirements
-from lxm3.xm_cluster.console import console
 from lxm3.xm_cluster.execution import job_script_builder
 
 
 class GridEngineJobScriptBuilder(
     job_script_builder.JobScriptBuilder[executors.GridEngine]
 ):
-    TASK_OFFSET = 1
+    ARRAY_TASK_ID = "SGE_TASK_ID"
+    ARRAY_TASK_OFFSET = 1
     JOB_SCRIPT_SHEBANG = "#!/usr/bin/env bash"
-    TASK_ID_VAR_NAME = "SGE_TASK_ID"
     JOB_ENV_PATTERN = "^(JOB_|SGE_|PE|NSLOTS|NHOSTS)"
 
-    executable_cls = executables.Command
+    executable_cls = executables.AppBundle
     executor_cls = executors.GridEngine
 
     @classmethod
@@ -38,27 +38,27 @@ class GridEngineJobScriptBuilder(
         )
 
     @classmethod
-    def _create_setup_cmds(
-        cls, executable: executables.Command, executor: executors.GridEngine
+    def _create_job_script_prologue(
+        cls, executable: executables.AppBundle, executor: executors.GridEngine
     ) -> str:
-        cmds = ["echo >&2 INFO[$(basename $0)]: Running on host $(hostname)"]
+        cmds = ['echo >&2 "INFO[$(basename "$0")]: Running on host $(hostname)"']
 
         for module in executor.modules:
             cmds.append(f"module load {module}")
         if cls._is_gpu_requested(executor):
             cmds.append(
-                "echo >&2 INFO[$(basename $0)]: CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
+                'echo >&2 "INFO[$(basename "$0")]: CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"'
             )
             cmds.append("nvidia-smi")
 
         if executable.singularity_image is not None:
             cmds.append(
-                "echo >&2 INFO[$(basename $0)]: Singularity version: $(singularity --version)"
+                'echo >&2 "INFO[$(basename "$0")]: Singularity version: $(singularity --version)"'
             )
         return "\n".join(cmds)
 
     @classmethod
-    def _create_job_header(
+    def _create_job_script_header(
         cls,
         executor: executors.GridEngine,
         num_array_tasks: Optional[int],
@@ -71,7 +71,7 @@ class GridEngineJobScriptBuilder(
         return job_header
 
     def build(
-        self, job: job_script_builder.ClusterJob, job_name: str, job_log_dir: str
+        self, job: job_script_builder.JobType, job_name: str, job_log_dir: str
     ) -> str:
         assert isinstance(job.executor, self.executor_cls)
         assert isinstance(job.executable, self.executable_cls)
@@ -104,38 +104,26 @@ class GridEngineClient:
 
     def __init__(
         self,
-        settings: Optional[config_lib.ClusterSettings] = None,
-        artifact_store: Optional[artifacts.ArtifactStore] = None,
+        settings: config_lib.ClusterSettings,
+        artifact_store: artifacts.ArtifactStore,
     ) -> None:
-        if settings is None:
-            settings = config_lib.default().cluster_settings()
         self._settings = settings
-
-        if artifact_store is None:
-            project = config_lib.default().project()
-            artifact_store = artifacts.create_artifact_store(
-                settings.storage_root,
-                hostname=settings.hostname,
-                user=settings.user,
-                project=project,
-                connect_kwargs=settings.ssh_config,
-            )
         self._artifact_store = artifact_store
 
         self._cluster = gridengine.GridEngineCluster(
             self._settings.hostname, self._settings.user
         )
 
-    def launch(self, job_name: str, job: job_script_builder.ClusterJob):
+    def launch(self, job_name: str, job: job_script_builder.JobType):
         job_name = re.sub("\\W", "_", job_name)
-        job_script_dir = self._artifact_store.job_path(job_name)
-        job_log_dir = self._artifact_store.job_log_path(job_name)
+        job_log_dir = job_script_builder.job_log_path(job_name)
+        self._artifact_store.ensure_dir(job_log_dir)
+        job_log_dir = self._artifact_store.normalize_path(job_log_dir)
+
         builder = self.builder_cls(self._settings)
         job_script_content = builder.build(job, job_name, job_log_dir)
-
-        self._artifact_store.deploy_job_scripts(job_name, job_script_content)
-        job_script_path = os.path.join(
-            job_script_dir, job_script_builder.JOB_SCRIPT_NAME
+        job_script_path = self._artifact_store.put_text(
+            job_script_content, job_script_builder.job_script_path(job_name)
         )
 
         if isinstance(job, array_job.ArrayJob):
@@ -143,33 +131,39 @@ class GridEngineClient:
         else:
             num_jobs = 1
 
-        console.log(f"Launching {num_jobs} job on {self._settings.hostname}")
-        console.log(f"Launch with command:\n  qsub {job_script_path}")
+        console.info(
+            f"Launching {num_jobs} job on {self._settings.hostname} with [cyan bold dim]qsub {job_script_path}[/]"
+        )
         group = self._cluster.launch(job_script_path)
-        console.log(f"Successfully launched job {group.group(0)}")
-        console.log(f"Logs are saved in {job_log_dir}")
 
         handles = [
             GridEngineHandle(job_id) for job_id in gridengine.split_job_ids(group)
         ]
 
-        self._save_job_id(job_script_path, group.group(0))
+        self._save_job_id(job_name, group.group(0))
+
+        console.info(
+            f"""\
+Successfully launched job [green bold]{group.group(0)}[/]
+ - Saved job id in [dim]{os.path.dirname(job_script_path)}/job_id[/]
+ - Find job logs in [dim]{job_log_dir}"""
+        )
 
         return handles
 
-    def _save_job_id(self, job_script_path: str, job_id: str):
-        self._artifact_store._fs.write_text(
-            os.path.join(os.path.dirname(job_script_path), "job_id"), f"{job_id}\n"
-        )
+    def _save_job_id(self, job_name: str, job_id: str):
+        self._artifact_store.put_text(job_id, f"jobs/{job_name}/job_id")
 
 
 @functools.lru_cache()
 def client():
-    return GridEngineClient()
+    settings = config_lib.default().cluster_settings()
+    artifact_store = artifacts.get_cluster_artifact_store()
+    return GridEngineClient(settings, artifact_store)
 
 
 async def launch(
-    job_name: str, job: job_script_builder.ClusterJob
+    job_name: str, job: job_script_builder.JobType
 ) -> List[GridEngineHandle]:
     if isinstance(job, array_job.ArrayJob):
         jobs = [job]  # type: ignore

@@ -6,8 +6,8 @@ import shutil
 import subprocess
 import tempfile
 
+from lxm3.xm_cluster import console
 from lxm3.xm_cluster import executable_specs as cluster_executable_specs
-from lxm3.xm_cluster.console import console
 
 ENTRYPOINT_SCRIPT = "./entrypoint.sh"
 
@@ -40,9 +40,7 @@ def create_python_archive(
     resources = py_package.resources
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        with console.status(
-            "Creating python package archive for {}".format(package_dir)
-        ):
+        with console.status(f"Building python package [dim]{package_dir}[/]"):
             try:
                 subprocess.run(
                     [
@@ -60,8 +58,8 @@ def create_python_archive(
                 )
             except subprocess.CalledProcessError as e:
                 if e.stderr:
-                    console.log("Error during packaging, stderr:", style="bold red")
-                    console.log(e.stderr, style="bold red")
+                    console.error("Error during packaging, stderr:")
+                    console.error(e.stderr)
                 raise PackagingError(
                     f"Failed to create python package from {package_dir}"
                 ) from e
@@ -84,7 +82,7 @@ def create_python_archive(
                             )
 
             if os.path.exists(os.path.join(tmpdir, "bin")):
-                console.log('Removing "bin/" directory as these are not yet portable.')
+                console.info('Removing "bin/" directory as these are not yet portable.')
                 shutil.rmtree(os.path.join(tmpdir, "bin"))
 
             for f in glob.glob(os.path.join(tmpdir, "*.dist-info")):
@@ -105,9 +103,7 @@ export PYTHONPATH=$(dirname $0):$PYTHONPATH
                 verbose=True,
             )
 
-        console.log(
-            f"Created archive: [repr.path]{os.path.basename(archive_name)}[repr.path]"
-        )
+        console.info(f"Created archive: {os.path.basename(archive_name)}")
 
     return os.path.basename(archive_name)
 
