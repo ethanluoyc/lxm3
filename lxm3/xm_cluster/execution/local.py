@@ -47,7 +47,7 @@ class LocalJobScriptBuilder(job_script_builder.JobScriptBuilder[executors.Local]
 
     @classmethod
     def _create_setup_cmds(
-        cls, executable: executables.Command, executor: executors.GridEngine
+        cls, executable: executables.Command, executor: executors.Local
     ) -> str:
         del executor
         cmds = ["echo >&2 INFO[$(basename $0)]: Running on host $(hostname)"]

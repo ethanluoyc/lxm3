@@ -157,7 +157,7 @@ def get_cached_image(image_spec: str, cache_dir: str) -> ImageInfo:
 
     elif transport == "podman-daemon":
         try:
-            import podman
+            import podman  # type: ignore
         except ImportError:
             raise ImportError(
                 "podman package is required to use docker daemon transport"

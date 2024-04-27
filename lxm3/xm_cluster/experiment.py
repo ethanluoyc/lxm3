@@ -49,8 +49,6 @@ async def _launch(
 class ClusterWorkUnit(xm.WorkUnit):
     """A mock version of WorkUnit with abstract methods implemented."""
 
-    experiment: "ClusterExperiment"
-
     def __init__(
         self,
         experiment: "ClusterExperiment",
@@ -72,26 +70,29 @@ class ClusterWorkUnit(xm.WorkUnit):
     async def _launch_job_group(
         self,
         job_group: xm.JobGroup,
-        args: Optional[Mapping[str, Any]],
+        args_view: Optional[Mapping[str, Any]],
         identity: str,
     ) -> None:
         """Appends the job group to the launched_jobs list."""
         del identity
 
         async with self._work_unit_id_predictor.submit_id(self._work_unit_id):  # type: ignore
-            await self._submit_job_for_execution(job_group, args)
+            await self._submit_job_for_execution(job_group, args_view)
 
-    async def _launch_job_config(self, job, args, identity):
+    async def _launch_job_config(self, job_config, args_view, identity):
         del identity
-        assert not args
+        assert not args_view
         async with self._work_unit_id_predictor.submit_id(self._work_unit_id):  # type: ignore
-            await self._submit_job_for_execution(job, args)
+            assert isinstance(job_config, array_job_lib.ArrayJob)
+            await self._submit_job_for_execution(job_config, args_view)
 
     async def _submit_job_for_execution(
         self, job: Union[xm.JobGroup, array_job_lib.ArrayJob], args
     ):
         launch_result = await _launch(
-            self.experiment._experiment_title, self.experiment_unit_name, job
+            self.experiment._experiment_title,  # type: ignore
+            self.experiment_unit_name,
+            job,
         )
         self._ingest_handles(launch_result)
 
@@ -195,11 +196,10 @@ class ClusterExperiment(xm.Experiment):
 
     @property
     def work_unit_count(self) -> int:
-        return len(self.work_units)
+        return len(self.work_units())
 
-    @property
     def work_units(self):
-        return self._work_units
+        return {i: wu for i, wu in enumerate(self._work_units)}
 
     @property
     def experiment_id(self) -> int:

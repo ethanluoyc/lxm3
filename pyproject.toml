@@ -129,6 +129,9 @@ exclude = [
   "lxm3/xm",
   "lxm3/_vendor",
 ]
+ignore = [
+  "lxm3/xm_cluster/executable_specs.py"
+]
 
 reportMissingImports = true
 reportMissingTypeStubs = false

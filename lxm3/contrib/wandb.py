@@ -19,6 +19,7 @@ with xm_cluster.create_experiment("experiment") as experiment:
     experiment.add(log_to_wandb(xm_cluster.ArrayJob(executable, ...)))
 
 """
+
 import copy
 import functools
 import logging
@@ -67,7 +68,7 @@ def configure_wandb(
         job = copy.copy(job)  # type: ignore
 
         async def job_gen(work_unit: xm_cluster.ClusterWorkUnit):
-            experiment_title = work_unit.experiment._experiment_title
+            experiment_title = work_unit.experiment._experiment_title  # type: ignore
             xid = work_unit.experiment_id
             wid = work_unit.work_unit_id
 
