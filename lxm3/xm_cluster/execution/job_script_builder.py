@@ -106,13 +106,15 @@ class JobScriptBuilder(abc.ABC, Generic[ExecutorType]):
         executable = job.executable
         if not isinstance(executable, executables.AppBundle):
             raise ValueError("Only Command executable is supported")
-        executor = cast(executors.SupportsContainer, job.executor)
+        executor = job.executor
+        if not isinstance(executor, executors.SupportsContainer):
+            raise TypeError("Executor should support container configuration")
 
-        if executable.singularity_image or executable.docker_image:
-            if executable.docker_image and executable.singularity_image:
-                raise ValueError("Only docker or singularity image should be used.")
-            if executable.singularity_image:
-                image = executable.singularity_image
+        if executable.container_image is not None:
+            image = executable.container_image.name
+            image_type = executable.container_image.image_type
+
+            if image_type == executables.ContainerImageType.SINGULARITY:
                 get_container_cmd = create_singularity_command
                 singularity_options = (
                     executor.singularity_options or executors.SingularityOptions()
@@ -121,8 +123,7 @@ class JobScriptBuilder(abc.ABC, Generic[ExecutorType]):
                     BindMount(src, dst) for src, dst in singularity_options.bind
                 ]
                 runtime_options = [*singularity_options.extra_options]
-            elif executable.docker_image:
-                image = executable.docker_image
+            elif image_type == executables.ContainerImageType.DOCKER:
                 get_container_cmd = create_docker_command
                 docker_options = executor.docker_options or executors.DockerOptions()
                 bind_mounts = [
@@ -136,8 +137,8 @@ class JobScriptBuilder(abc.ABC, Generic[ExecutorType]):
                 [
                     BindMount(install_dir, self.CONTAINER_WORKDIR),
                     BindMount(
-                        f"{install_dir}/{self.JOB_PARAM_NAME}",
-                        f"{self.CONTAINER_JOB_PARAM_PATH}",
+                        os.path.join(install_dir, self.JOB_PARAM_NAME),
+                        self.CONTAINER_JOB_PARAM_PATH,
                         read_only=True,
                     ),
                 ]
@@ -153,7 +154,7 @@ class JobScriptBuilder(abc.ABC, Generic[ExecutorType]):
                 options=runtime_options,
                 working_dir=self.CONTAINER_WORKDIR,
                 use_gpu=self._is_gpu_requested(executor),
-                env_file=f"{install_dir}/.environment",
+                env_file=os.path.join(install_dir, ".environment"),
             )
 
         else:
@@ -402,3 +403,17 @@ def job_script_path(job_name: str):
 
 def job_log_path(job_name: str):
     return os.path.join("logs", job_name)
+
+
+def flatten_job(
+    job: Union[xm.JobGroup, array_job.ArrayJob],
+) -> List[Union[xm.Job, array_job.ArrayJob]]:
+    if isinstance(job, array_job.ArrayJob):
+        return [job]  # type: ignore
+    elif isinstance(job, xm.JobGroup):
+        jobs = xm.job_operators.flatten_jobs(job)
+        if len(jobs) > 1:
+            raise NotImplementedError("JobGroup is not supported.")
+        return jobs  # type: ignore
+    else:
+        raise NotImplementedError()

@@ -11,7 +11,7 @@ from absl.testing import parameterized
 from lxm3 import xm
 from lxm3 import xm_cluster
 from lxm3.xm_cluster import artifacts
-from lxm3.xm_cluster.packaging import cluster
+from lxm3.xm_cluster.packaging import router
 
 _HERE = os.path.abspath(os.path.dirname(__file__))
 
@@ -22,7 +22,7 @@ def _create_artifact_store(staging, project):
 
 class PackagingTest(parameterized.TestCase):
     @parameterized.parameters(
-        (cluster._package_python_package,),
+        (router._package_python_package,),
     )
     def test_package_python(self, pkg_fun):
         spec = xm_cluster.PythonPackage(
@@ -54,7 +54,7 @@ class PackagingTest(parameterized.TestCase):
         )
 
     @parameterized.parameters(
-        (cluster._package_universal_package,),
+        (router._package_universal_package,),
     )
     @absltest.skipIf("darwin" in sys.platform, "Not working on MacOS")
     def test_package_universal(self, pkg_fun):

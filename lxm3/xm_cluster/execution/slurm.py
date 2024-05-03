@@ -36,12 +36,7 @@ class SlurmJobScriptBuilder(job_script_builder.JobScriptBuilder[executors.Slurm]
             cmds.append(
                 'echo >&2 "INFO[$(basename "$0")]: CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"'
             )
-            # cmds.append("nvidia-smi")
 
-        if executable.singularity_image is not None:
-            cmds.append(
-                'echo >&2 "INFO[$(basename "$0")]: Singularity version: $(singularity --version)"'
-            )
         return "\n".join(cmds)
 
     @classmethod
@@ -69,24 +64,9 @@ class SlurmHandle:
     def __init__(self, job_id: str) -> None:
         self.job_id = job_id
 
-    async def wait(self):
-        raise NotImplementedError()
-
-    async def monitor(self):
-        raise NotImplementedError()
-
-
-def _slurm_job_predicate(job):
-    if isinstance(job, xm.Job):
-        return isinstance(job.executor, executors.Slurm)
-    elif isinstance(job, array_job.ArrayJob):
-        return isinstance(job.executor, executors.Slurm)
-    else:
-        raise ValueError(f"Unexpected job type: {type(job)}")
-
 
 class SlurmClient:
-    builder_cls = SlurmJobScriptBuilder
+    builder_cls: type[SlurmJobScriptBuilder] = SlurmJobScriptBuilder
 
     def __init__(
         self,
@@ -121,11 +101,7 @@ class SlurmClient:
         console.info(f"Successfully launched job {job_id}")
         self._artifact_store.put_text(str(job_id), f"jobs/{job_name}/job_id")
 
-        if num_jobs > 1:
-            job_ids = [f"{job_id}_{i}" for i in range(num_jobs)]
-        else:
-            job_ids = [f"{job_id}"]
-        handles = [SlurmHandle(j) for j in job_ids]
+        handles = [SlurmHandle(job_id)]
 
         return handles
 
@@ -137,14 +113,17 @@ def client() -> SlurmClient:
     return SlurmClient(settings, artifact_store)
 
 
-async def launch(job_name: str, job: job_script_builder.JobType) -> List[SlurmHandle]:
-    if isinstance(job, array_job.ArrayJob):
-        jobs = [job]  # type: ignore
-    elif isinstance(job, xm.JobGroup):
-        jobs: List[xm.Job] = xm.job_operators.flatten_jobs(job)
-    elif isinstance(job, xm.Job):
-        jobs = [job]
+def _slurm_job_predicate(job):
+    if isinstance(job, xm.Job):
+        return isinstance(job.executor, executors.Slurm)
+    elif isinstance(job, array_job.ArrayJob):
+        return isinstance(job.executor, executors.Slurm)
+    else:
+        raise ValueError(f"Unexpected job type: {type(job)}")
 
+
+async def launch(job_name: str, job) -> List[SlurmHandle]:
+    jobs = job_script_builder.flatten_job(job)
     jobs = [job for job in jobs if _slurm_job_predicate(job)]
 
     if not jobs:

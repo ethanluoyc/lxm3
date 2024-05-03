@@ -102,7 +102,7 @@ class ArtifactStore:
 
     def should_update(self, lpath: str, rpath: str) -> Tuple[bool, str]:
         if not self.exists(rpath):
-            return True, "file does not exist"
+            return True, "new file"
 
         local_stat = os.stat(lpath)
         local_size = local_stat.st_size

@@ -1,7 +1,5 @@
 import os
-import shutil
 import subprocess
-import sys
 import textwrap
 import unittest
 import zipfile
@@ -26,14 +24,19 @@ from lxm3.xm_cluster.execution import gridengine
 from lxm3.xm_cluster.execution import job_script_builder as job_script
 from lxm3.xm_cluster.execution import local
 from lxm3.xm_cluster.execution import slurm
+from tests import utils
 
 
-def is_singularity_installed():
-    return shutil.which("singularity") is not None
+def _create_singularity_image(name):
+    return executables.ContainerImage(
+        name=name, image_type=executables.ContainerImageType.SINGULARITY
+    )
 
 
-def is_docker_installed():
-    return shutil.which("docker") is not None
+def _create_docker_image(name):
+    return executables.ContainerImage(
+        name=name, image_type=executables.ContainerImageType.DOCKER
+    )
 
 
 class JobScriptBuilderTest(parameterized.TestCase):
@@ -92,6 +95,19 @@ class JobScriptBuilderTest(parameterized.TestCase):
             ),
         )
 
+    def test_ml_collections_quoting(self):
+        args = xm.SequentialArgs.from_collection({"config.name": "train[:90%]"})
+        args = args.to_list()
+        self.assertEqual(
+            job_script._create_args([args], "LXM_TASK_ID", 0),
+            textwrap.dedent(
+                """\
+                TASK_CMD_ARGS_0="--config.name='train[:90%]'"
+                TASK_CMD_ARGS=$(eval echo \\$"TASK_CMD_ARGS_$LXM_TASK_ID")
+                eval set -- $TASK_CMD_ARGS""",
+            ),
+        )
+
 
 class LocalExecutionTest(parameterized.TestCase):
     @parameterized.named_parameters(
@@ -117,7 +133,7 @@ class LocalExecutionTest(parameterized.TestCase):
             name="test",
             entrypoint_command="echo hello",
             resource_uri=archive.full_path,
-            singularity_image=container.full_path,
+            container_image=_create_singularity_image(container.full_path),
         )
         executor = executors.Local()
         job = xm.Job(executable, executor, name="test")
@@ -149,18 +165,22 @@ class LocalExecutionTest(parameterized.TestCase):
             raise
         return process
 
-    def test_job_script_run_single_job(self):
+    def _create_bundle(self, entrypoint: str, container_image=None):
         tmpf = self.create_tempfile("test.zip")
         with zipfile.ZipFile(tmpf.full_path, "w") as z:
             info = zipfile.ZipInfo("entrypoint.sh")
             info.external_attr = 0o777 << 16  # give full access to included file
-            z.writestr(
-                info,
-                "#!/usr/bin/env bash\necho $@ $FOO",
-            )
-        executable = xm_cluster.AppBundle(
-            "foo", "./entrypoint.sh", resource_uri=tmpf.full_path
+            z.writestr(info, entrypoint)
+
+        return xm_cluster.AppBundle(
+            "foo",
+            "./entrypoint.sh",
+            resource_uri=tmpf.full_path,
+            container_image=container_image,
         )
+
+    def test_job_script_run_single_job(self):
+        executable = self._create_bundle("#!/usr/bin/env bash\necho $@ $FOO")
         job = xm.Job(
             executable,
             executor=xm_cluster.Local(),
@@ -173,17 +193,7 @@ class LocalExecutionTest(parameterized.TestCase):
         self.assertEqual(process.stdout.decode("utf-8").strip(), "--seed=1 FOO_0")
 
     def test_job_script_run_array_job(self):
-        tmpf = self.create_tempfile("test.zip")
-        with zipfile.ZipFile(tmpf.full_path, "w") as z:
-            info = zipfile.ZipInfo("entrypoint.sh")
-            info.external_attr = 0o777 << 16  # give full access to included file
-            z.writestr(
-                info,
-                "#!/usr/bin/env bash\necho $@ $FOO",
-            )
-        executable = xm_cluster.AppBundle(
-            "foo", "./entrypoint.sh", resource_uri=tmpf.full_path
-        )
+        executable = self._create_bundle("#!/usr/bin/env bash\necho $@ $FOO")
         job = xm_cluster.ArrayJob(
             executable,
             executor=xm_cluster.Local(),
@@ -201,68 +211,14 @@ class LocalExecutionTest(parameterized.TestCase):
         )
         self.assertEqual(process.stdout.decode("utf-8").strip(), "--seed=2 FOO_1")
 
-    def test_job_script_handles_ml_collections_quoting(self):
-        tmpf = self.create_tempfile("test.zip")
-        with zipfile.ZipFile(tmpf.full_path, "w") as z:
-            info = zipfile.ZipInfo("entrypoint.sh")
-            info.external_attr = 0o777 << 16  # give full access to included file
-            z.writestr(
-                "run.py",
-                textwrap.dedent("""\
-                    from absl import app
-                    from ml_collections import config_dict
-                    from ml_collections import config_flags
-
-                    def _get_config():
-                        config = config_dict.ConfigDict()
-                        config.name = ""
-                        return config
-
-                    _CONFIG = config_flags.DEFINE_config_dict("config", _get_config())
-
-                    def main(_):
-                        config = _CONFIG.value
-                        print(config.name)
-
-                    if __name__ == "__main__":
-                        config = _get_config()
-                        app.run(main)"""),
-            )
-            z.writestr(
-                info,
-                "#!/usr/bin/env bash\n{} run.py $@\n".format(sys.executable),
-            )
-        executable = xm_cluster.AppBundle(
-            "foo", "./entrypoint.sh", resource_uri=tmpf.full_path
-        )
-        job = xm_cluster.ArrayJob(
-            executable,
-            executor=xm_cluster.Local(),
-            args=[{"config.name": "train[:90%]"}],
-            env_vars=[{"FOO": "FOO_0"}],
-        )
-        builder = local.LocalJobScriptBuilder()
-        job_script_content = builder.build(job, "foo", "/tmp")
-        process = self._run_job_script(job_script_content, env={"LOCAL_TASK_ID": "1"})
-        self.assertEqual(process.stdout.decode("utf-8").strip(), "train[:90%]")
-
     @pytest.mark.integration
-    @unittest.skipIf(not is_singularity_installed(), "Singularity is not installed")
+    @unittest.skipIf(
+        not utils.is_singularity_installed(), "Singularity is not installed"
+    )
     def test_singularity(self):
-        tmpf = self.create_tempfile("test.zip")
-        with zipfile.ZipFile(tmpf.full_path, "w") as z:
-            info = zipfile.ZipInfo("entrypoint.sh")
-            info.external_attr = 0o777 << 16  # give full access to included file
-            z.writestr(
-                info,
-                "#!/usr/bin/env bash\necho $FOO",
-            )
-
-        executable = xm_cluster.AppBundle(
-            "test",
-            "./entrypoint.sh",
-            resource_uri=tmpf.full_path,
-            singularity_image="docker://python:3.10-slim",
+        executable = self._create_bundle(
+            "#!/usr/bin/env bash\necho $FOO",
+            container_image=_create_singularity_image("docker://python:3.10-slim"),
         )
         job = xm_cluster.ArrayJob(
             executable,
@@ -280,22 +236,11 @@ class LocalExecutionTest(parameterized.TestCase):
         self.assertEqual(process.stdout.decode("utf-8").strip(), "FOO_0")
 
     @pytest.mark.integration
-    @unittest.skipIf(not is_docker_installed(), "Docker is not installed")
+    @unittest.skipIf(not utils.is_docker_installed(), "Docker is not installed")
     def test_docker_image(self):
-        tmpf = self.create_tempfile("test.zip")
-        with zipfile.ZipFile(tmpf.full_path, "w") as z:
-            info = zipfile.ZipInfo("entrypoint.sh")
-            info.external_attr = 0o777 << 16  # give full access to included file
-            z.writestr(
-                info,
-                "#!/usr/bin/env bash\necho $FOO\n",
-            )
-
-        executable = xm_cluster.AppBundle(
-            "test",
-            "./entrypoint.sh",
-            resource_uri=tmpf.full_path,
-            docker_image="python:3.10-slim",
+        executable = self._create_bundle(
+            "#!/usr/bin/env bash\necho $FOO",
+            container_image=_create_docker_image("python:3.10-slim"),
         )
         job = xm_cluster.ArrayJob(
             executable, executor=xm_cluster.Local(), env_vars=[{"FOO": "FOO_0"}]
@@ -346,7 +291,7 @@ class GridEngineExecutionTest(parameterized.TestCase):
             name="test",
             entrypoint_command="echo hello",
             resource_uri="",
-            singularity_image="docker://python:3.10-slim",
+            container_image=_create_singularity_image("docker://python:3.10-slim"),
         )
         executor = executors.GridEngine(modules=["module1"])
         with patch.object(
@@ -376,7 +321,7 @@ class GridEngineExecutionTest(parameterized.TestCase):
             name="test",
             entrypoint_command="echo hello",
             resource_uri=archive.full_path,
-            singularity_image=container.full_path,
+            container_image=_create_singularity_image(container.full_path),
         )
         executor = executors.GridEngine()
         job = xm.Job(executable, executor, name="test")
@@ -388,7 +333,7 @@ class GridEngineExecutionTest(parameterized.TestCase):
         with mock.patch.object(
             gridengine_cluster.GridEngineCluster, "launch"
         ) as mock_launch:
-            mock_launch.return_value = gridengine_cluster.parse_job_id("1")
+            mock_launch.return_value = "1"
             client.launch("test_job", job)
 
 
@@ -417,7 +362,7 @@ class SlurmExecutionTest(parameterized.TestCase):
             name="test",
             entrypoint_command="echo hello",
             resource_uri="",
-            singularity_image="docker://python:3.10-slim",
+            container_image=_create_singularity_image("docker://python:3.10-slim"),
         )
         executor = executors.Slurm(modules=["module1"])
         with patch.object(
@@ -429,7 +374,6 @@ class SlurmExecutionTest(parameterized.TestCase):
                 executable, executor
             )
         self.assertIn("module load module1", setup_cmds)
-        self.assertIn("singularity --version", setup_cmds)
 
     def test_slurm_launch(self):
         staging_dir = self.create_tempdir(name="staging")
@@ -444,7 +388,9 @@ class SlurmExecutionTest(parameterized.TestCase):
             name="test",
             entrypoint_command="echo hello",
             resource_uri=archive.full_path,
-            singularity_image=container.full_path,
+            container_image=_create_singularity_image(
+                container.full_path,
+            ),
         )
         executor = executors.Slurm()
         job = xm.Job(executable, executor, name="test")

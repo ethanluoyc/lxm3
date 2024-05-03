@@ -145,10 +145,10 @@ class GridEngineCluster:
                 result = self._connection.run(command, hide="both")
                 return result.stdout
 
-    def launch(self, command):
+    def launch(self, command) -> str:
         output = self._run_command(f"qsub {command}")
         match = parse_job_id(output)
-        return match
+        return match.group(0)
 
     def qstat(self):
         stats = parse_qstat(self._run_command("qstat -xml"))

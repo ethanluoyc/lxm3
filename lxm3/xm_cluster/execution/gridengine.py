@@ -51,7 +51,11 @@ class GridEngineJobScriptBuilder(
             )
             cmds.append("nvidia-smi")
 
-        if executable.singularity_image is not None:
+        if (
+            executable.container_image
+            and executable.container_image.image_type
+            == executables.ContainerImageType.SINGULARITY
+        ):
             cmds.append(
                 'echo >&2 "INFO[$(basename "$0")]: Singularity version: $(singularity --version)"'
             )
@@ -82,24 +86,9 @@ class GridEngineHandle:
     def __init__(self, job_id: str) -> None:
         self.job_id = job_id
 
-    async def wait(self):
-        raise NotImplementedError()
-
-    async def monitor(self):
-        raise NotImplementedError()
-
-
-def _sge_job_predicate(job):
-    if isinstance(job, xm.Job):
-        return isinstance(job.executor, executors.GridEngine)
-    elif isinstance(job, array_job.ArrayJob):
-        return isinstance(job.executor, executors.GridEngine)
-    else:
-        raise ValueError(f"Unexpected job type: {type(job)}")
-
 
 class GridEngineClient:
-    builder_cls = GridEngineJobScriptBuilder
+    builder_cls: type[GridEngineJobScriptBuilder] = GridEngineJobScriptBuilder
     _settings: config_lib.ClusterSettings
 
     def __init__(
@@ -134,17 +123,15 @@ class GridEngineClient:
         console.info(
             f"Launching {num_jobs} job on {self._settings.hostname} with [cyan bold dim]qsub {job_script_path}[/]"
         )
-        group = self._cluster.launch(job_script_path)
+        job_id = self._cluster.launch(job_script_path)
 
-        handles = [
-            GridEngineHandle(job_id) for job_id in gridengine.split_job_ids(group)
-        ]
+        handles = [GridEngineHandle(job_id)]
 
-        self._save_job_id(job_name, group.group(0))
+        self._save_job_id(job_name, job_id)
 
         console.info(
             f"""\
-Successfully launched job [green bold]{group.group(0)}[/]
+Successfully launched job [green bold]{job_id}[/]
  - Saved job id in [dim]{os.path.dirname(job_script_path)}/job_id[/]
  - Find job logs in [dim]{job_log_dir}"""
         )
@@ -162,16 +149,17 @@ def client():
     return GridEngineClient(settings, artifact_store)
 
 
-async def launch(
-    job_name: str, job: job_script_builder.JobType
-) -> List[GridEngineHandle]:
-    if isinstance(job, array_job.ArrayJob):
-        jobs = [job]  # type: ignore
-    elif isinstance(job, xm.JobGroup):
-        jobs: List[xm.Job] = xm.job_operators.flatten_jobs(job)
+def _sge_job_predicate(job):
+    if isinstance(job, xm.Job):
+        return isinstance(job.executor, executors.GridEngine)
+    elif isinstance(job, array_job.ArrayJob):
+        return isinstance(job.executor, executors.GridEngine)
     else:
-        raise NotImplementedError()
+        raise ValueError(f"Unexpected job type: {type(job)}")
 
+
+async def launch(job_name: str, job) -> List[GridEngineHandle]:
+    jobs = job_script_builder.flatten_job(job)
     jobs = [job for job in jobs if _sge_job_predicate(job)]
 
     if not jobs:

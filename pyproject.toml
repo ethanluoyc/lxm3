@@ -83,6 +83,7 @@ cov = {composite = ["test-cov", "coverage report"]}
 docs = "sphinx-build -b html docs docs/build/html -j auto"
 lint.shell = "ruff check ."
 fmt.shell = "ruff format ."
+typecheck.shell = "pyright"
 
 [tool.ruff]
 exclude = ["_vendor", "xm", ".venv"]
@@ -114,7 +115,6 @@ omit = [
   "lxm3/_vendor/*",
   "tests/*",
   "conftest.py",
-  "lxm3/xm_cluster/execution/utils.py" # not used
 ]
 
 [tool.coverage.report]

@@ -6,7 +6,7 @@ import os
 import re
 import shutil
 import subprocess
-from typing import List, Optional
+from typing import Optional
 
 from absl import logging
 
@@ -52,11 +52,6 @@ class LocalJobScriptBuilder(job_script_builder.JobScriptBuilder[executors.Local]
     ) -> str:
         del executor
         cmds = ['echo >&2 "INFO[$(basename "$0")]: Running on host $(hostname)"']
-
-        if executable.singularity_image is not None:
-            cmds.append(
-                'echo >&2 "INFO[$(basename "$0")]: Singularity version: $(singularity --version)"'
-            )
         return "\n".join(cmds)
 
     @classmethod
@@ -89,17 +84,8 @@ class LocalExecutionHandle:
         await asyncio.wrap_future(self.future)
 
 
-def _local_job_predicate(job):
-    if isinstance(job, xm.Job):
-        return isinstance(job.executor, executors.Local)
-    elif isinstance(job, array_job_lib.ArrayJob):
-        return isinstance(job.executor, executors.Local)
-    else:
-        raise ValueError(f"Unexpected job type: {type(job)}")
-
-
 class LocalClient:
-    builder_cls = LocalJobScriptBuilder
+    builder_cls: type[LocalJobScriptBuilder] = LocalJobScriptBuilder
 
     def __init__(
         self,
@@ -157,14 +143,17 @@ def client() -> LocalClient:
     return LocalClient(local_settings, artifact_store)
 
 
-async def launch(job_name: str, job: job_script_builder.JobType):
-    if isinstance(job, array_job_lib.ArrayJob):
-        jobs = [job]  # type: ignore
-    elif isinstance(job, xm.JobGroup):
-        jobs: List[xm.Job] = xm.job_operators.flatten_jobs(job)
-    elif isinstance(job, xm.Job):
-        jobs = [job]
+def _local_job_predicate(job):
+    if isinstance(job, xm.Job):
+        return isinstance(job.executor, executors.Local)
+    elif isinstance(job, array_job_lib.ArrayJob):
+        return isinstance(job.executor, executors.Local)
+    else:
+        raise ValueError(f"Unexpected job type: {type(job)}")
 
+
+async def launch(job_name: str, job):
+    jobs = job_script_builder.flatten_job(job)
     jobs = [job for job in jobs if _local_job_predicate(job)]
 
     if not jobs:

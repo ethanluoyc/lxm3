@@ -32,9 +32,9 @@ class SlurmCluster:
             if self._connection is not None:
                 self._connection.close()  # type: ignore
 
-    def launch(self, command) -> int:
+    def launch(self, command) -> str:
         output = self._submit_command(command)
-        return parse_job_id(output)
+        return str(parse_job_id(output))
 
     def _run_command(self, command: str) -> str:
         if self._connection is None:

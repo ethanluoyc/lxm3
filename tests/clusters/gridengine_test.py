@@ -133,8 +133,8 @@ class ClusterTest(absltest.TestCase):
             stdout='Your job 9830196 ("MyTESTJOBNAME") has been submitted',
         )
         cluster = gridengine.GridEngineCluster(hostname="host", username="user")
-        match = cluster.launch("job.qsub")
-        self.assertEqual(match.group(0), "9830196")
+        job_id = cluster.launch("job.qsub")
+        self.assertEqual(job_id, "9830196")
         cluster.close()
 
 

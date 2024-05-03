@@ -7,7 +7,7 @@ import subprocess
 import tempfile
 
 from lxm3.xm_cluster import console
-from lxm3.xm_cluster import executable_specs as cluster_executable_specs
+from lxm3.xm_cluster import executable_specs
 
 ENTRYPOINT_SCRIPT = "./entrypoint.sh"
 
@@ -16,10 +16,10 @@ class PackagingError(Exception):
     """Error raised when packaging fails."""
 
 
-def _create_entrypoint_cmds(python_package: cluster_executable_specs.PythonPackage):
-    if isinstance(python_package.entrypoint, cluster_executable_specs.ModuleName):
+def _create_entrypoint_cmds(python_package: executable_specs.PythonPackage) -> str:
+    if isinstance(python_package.entrypoint, executable_specs.ModuleName):
         cmds = ["python3 -m {}".format(python_package.entrypoint.module_name)]
-    elif isinstance(python_package.entrypoint, cluster_executable_specs.CommandList):
+    elif isinstance(python_package.entrypoint, executable_specs.CommandList):
         cmds = python_package.entrypoint.commands
     else:
         raise ValueError("Unexpected entrypoint: {}".format(python_package.entrypoint))
@@ -31,8 +31,8 @@ def _create_entrypoint_cmds(python_package: cluster_executable_specs.PythonPacka
 
 
 def create_python_archive(
-    staging_directory: str, py_package: cluster_executable_specs.PythonPackage
-):
+    staging_directory: str, py_package: executable_specs.PythonPackage
+) -> str:
     package_name = py_package.name
     version = datetime.datetime.now().strftime("%Y%m%d.%H%M%S")
     archive_name = f"{package_name}-{version}"
@@ -109,8 +109,8 @@ export PYTHONPATH=$(dirname $0):$PYTHONPATH
 
 
 def create_universal_archive(
-    staging_directory: str, universal_package: cluster_executable_specs.UniversalPackage
-):
+    staging_directory: str, universal_package: executable_specs.UniversalPackage
+) -> str:
     version = datetime.datetime.now().strftime("%Y%m%d.%H%M%S")
     archive_name = f"{universal_package.name}-{version}"
 

@@ -1,4 +1,5 @@
 import datetime
+import typing
 from typing import Any, Dict, Optional, Protocol, Sequence, Union
 
 import attr
@@ -62,6 +63,7 @@ class DockerOptions:
     extra_options: Sequence[str] = attr.Factory(list)
 
 
+@typing.runtime_checkable
 class SupportsContainer(Protocol):
     singularity_options: Optional[SingularityOptions]
     docker_options: Optional[DockerOptions]
