@@ -1,5 +1,5 @@
 import datetime
-from typing import Any, Dict, Optional, Sequence, Union
+from typing import Any, Dict, Optional, Protocol, Sequence, Union
 
 import attr
 
@@ -62,13 +62,18 @@ class DockerOptions:
     extra_options: Sequence[str] = attr.Factory(list)
 
 
+class SupportsContainer(Protocol):
+    singularity_options: Optional[SingularityOptions]
+    docker_options: Optional[DockerOptions]
+
+
 @attr.s(auto_attribs=True)
 class LocalSpec(xm.ExecutorSpec):
     """Spec for local execution."""
 
 
 @attr.s(auto_attribs=True)
-class Local(xm.Executor):
+class Local(xm.Executor, SupportsContainer):
     """Local executor.
 
     Args:
@@ -92,7 +97,7 @@ class GridEngineSpec(xm.ExecutorSpec):
 
 
 @attr.s(auto_attribs=True)
-class GridEngine(xm.Executor):
+class GridEngine(xm.Executor, SupportsContainer):
     """SGE executor.
 
     Attributes:
@@ -170,7 +175,7 @@ class SlurmSpec(xm.ExecutorSpec):
 
 
 @attr.s(auto_attribs=True)
-class Slurm(xm.Executor):
+class Slurm(xm.Executor, SupportsContainer):
     """Slurm executor."""
 
     requirements: JobRequirements = attr.Factory(JobRequirements)

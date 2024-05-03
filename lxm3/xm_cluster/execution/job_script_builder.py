@@ -14,7 +14,7 @@ from lxm3.xm_cluster import executables
 from lxm3.xm_cluster import executors
 
 JobType = Union[xm.Job, array_job.ArrayJob]
-ExecutorType = TypeVar("ExecutorType")
+ExecutorType = TypeVar("ExecutorType", bound=executors.SupportsContainer)
 
 
 class JobScriptBuilder(abc.ABC, Generic[ExecutorType]):
@@ -106,9 +106,7 @@ class JobScriptBuilder(abc.ABC, Generic[ExecutorType]):
         executable = job.executable
         if not isinstance(executable, executables.AppBundle):
             raise ValueError("Only Command executable is supported")
-        executor = cast(
-            Union[executors.Local, executors.GridEngine, executors.Slurm], job.executor
-        )
+        executor = cast(executors.SupportsContainer, job.executor)
 
         if executable.singularity_image or executable.docker_image:
             if executable.docker_image and executable.singularity_image:
@@ -171,7 +169,7 @@ class JobScriptBuilder(abc.ABC, Generic[ExecutorType]):
         executable = job.executable
         if not isinstance(executable, executables.AppBundle):
             raise TypeError("Only AppBundle is supported")
-        executor = job.executor
+        executor = cast(executors.SupportsContainer, job.executor)
 
         num_array_tasks = None
         if isinstance(job, array_job.ArrayJob):
@@ -180,7 +178,7 @@ class JobScriptBuilder(abc.ABC, Generic[ExecutorType]):
         header = self._create_job_script_header(
             executor, num_array_tasks, job_log_dir, job_name
         )
-        prologue = self._create_job_script_prologue(executable, job.executor)
+        prologue = self._create_job_script_prologue(executable, executor)
         install_dir = "$LXM_WORKDIR"
         install_cmds = self._create_install_commands(job, install_dir)
         entrypoint_cmds = self._create_entrypoint_commands(job, install_dir)
