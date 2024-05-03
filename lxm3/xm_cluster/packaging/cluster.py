@@ -14,13 +14,13 @@ import rich.progress
 from lxm3 import singularity
 from lxm3 import xm
 from lxm3._vendor.xmanager.xm import pattern_matching
+from lxm3.docker import build_image
 from lxm3.experimental import image_cache
 from lxm3.xm_cluster import artifacts
 from lxm3.xm_cluster import console
 from lxm3.xm_cluster import executable_specs as cluster_executable_specs
 from lxm3.xm_cluster import executables as cluster_executables
 from lxm3.xm_cluster.packaging import archive_builder
-from lxm3.xm_cluster.packaging import container_builder
 
 _IMAGE_CACHE_DIR = os.path.join(appdirs.user_cache_dir("lxm3"), "image_cache")
 
@@ -181,10 +181,10 @@ def _package_pdm_project(
         pdm_project.entrypoint,
         path=pdm_project.path,
     )
-    dockerfile = container_builder.pdm_dockerfile(
+    dockerfile = build_image.pdm_dockerfile(
         pdm_project.base_image, pdm_project.lock_file
     )
-    container_builder.build_image_by_dockerfile_content(
+    build_image.build_image_by_dockerfile_content(
         py_package.name, dockerfile, py_package.path
     )
 
@@ -201,11 +201,11 @@ def _package_python_container(
     py_package = cluster_executable_specs.PythonPackage(
         python_container.entrypoint, path=python_container.path
     )
-    dockerfile = container_builder.python_container_dockerfile(
+    dockerfile = build_image.python_container_dockerfile(
         base_image=python_container.base_image,
         requirements=python_container.requirements,
     )
-    container_builder.build_image_by_dockerfile_content(
+    build_image.build_image_by_dockerfile_content(
         py_package.name, dockerfile, py_package.path
     )
     singularity_image = "docker-daemon://{}:latest".format(py_package.name)
