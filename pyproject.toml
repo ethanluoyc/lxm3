@@ -6,7 +6,7 @@ build-backend = "pdm.backend"
 name = "lxm3"
 description = 'LXM3: XManager launch backend for HPC clusters'
 readme = "README.md"
-requires-python = ">=3.9,<3.13"
+requires-python = ">=3.10,<3.13"
 license = {text = "MIT"}
 keywords = ["machine-learning", "hpc", "packaging", "singularity"]
 authors = [{ name = "Yicheng Luo", email = "ethanluoyc@gmail.com" }]
@@ -14,9 +14,9 @@ classifiers = [
   "Development Status :: 4 - Beta",
   "Programming Language :: Python",
   "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: Implementation :: CPython",
 ]
 dynamic = ["version"]
@@ -143,7 +143,7 @@ ignore = [
 reportMissingImports = true
 reportMissingTypeStubs = false
 
-pythonVersion = "3.9"
+pythonVersion = "3.10"
 pythonPlatform = "Linux"
 
 [tool.pytest.ini_options]
