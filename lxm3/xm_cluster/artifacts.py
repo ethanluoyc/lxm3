@@ -1,5 +1,4 @@
 import datetime
-import functools
 import os
 import shutil
 from typing import Optional, Tuple
@@ -8,8 +7,6 @@ import attr
 import fsspec
 from fsspec.implementations import local
 from fsspec.implementations import sftp
-
-from lxm3.xm_cluster import config as config_lib
 
 
 @attr.s(auto_attribs=True)
@@ -118,31 +115,3 @@ class ArtifactStore:
             return True, "local file is newer"
 
         return False, ""
-
-
-@functools.lru_cache(maxsize=None)
-def get_local_artifact_store() -> ArtifactStore:
-    default = config_lib.default()
-    settings = default.local_settings()
-    project = default.project()
-    filesystem = fsspec.filesystem("file")
-    storage_root = os.path.abspath(os.path.expanduser(settings.storage_root))
-    return ArtifactStore(filesystem, storage_root, project=project)
-
-
-@functools.lru_cache(maxsize=None)
-def get_cluster_artifact_store() -> ArtifactStore:
-    default = config_lib.default()
-    settings = default.cluster_settings()
-    project = default.project()
-
-    if settings.hostname is None:
-        filesystem = fsspec.filesystem("file")
-        storage_root = os.path.abspath(os.path.expanduser(settings.storage_root))
-    else:
-        filesystem = sftp.SFTPFileSystem(
-            host=settings.hostname, username=settings.user, **settings.ssh_config
-        )
-        storage_root = filesystem.ftp.normalize(settings.storage_root)
-
-    return ArtifactStore(filesystem, staging_directory=storage_root, project=project)

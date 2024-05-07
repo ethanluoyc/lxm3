@@ -103,6 +103,10 @@ class GridEngineClient:
             self._settings.hostname, self._settings.user
         )
 
+    @property
+    def artifact_store(self):
+        return self._artifact_store
+
     def launch(self, job_name: str, job: job_script_builder.JobType):
         job_name = re.sub("\\W", "_", job_name)
         job_log_dir = job_script_builder.job_log_path(job_name)
@@ -144,8 +148,10 @@ Successfully launched job [green bold]{job_id}[/]
 
 @functools.lru_cache()
 def client():
+    project = config_lib.default().project()
     settings = config_lib.default().cluster_settings()
-    artifact_store = artifacts.get_cluster_artifact_store()
+    artifact_store = job_script_builder.create_artifact_store(project, settings)
+
     return GridEngineClient(settings, artifact_store)
 
 

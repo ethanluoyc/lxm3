@@ -21,6 +21,9 @@ from lxm3.xm_cluster import console
 from lxm3.xm_cluster import executable_specs as cluster_executable_specs
 from lxm3.xm_cluster import executables as cluster_executables
 from lxm3.xm_cluster import executors
+from lxm3.xm_cluster.execution import gridengine
+from lxm3.xm_cluster.execution import local
+from lxm3.xm_cluster.execution import slurm
 from lxm3.xm_cluster.packaging import build_archive
 
 _IMAGE_CACHE_DIR = os.path.join(appdirs.user_cache_dir("lxm3"), "image_cache")
@@ -301,19 +304,19 @@ _PACKAGING_ROUTER = pattern_matching.match(
 
 def packaging_router(packageable: xm.Packageable):
     def package_local(executable_spec: executors.LocalSpec):
-        artifact_store = artifacts.get_local_artifact_store()
+        artifact_store = local.client().artifact_store
         return _PACKAGING_ROUTER(
             packageable.executable_spec, packageable, artifact_store
         )
 
     def package_gridengine(executable_spec: executors.GridEngineSpec):
-        artifact_store = artifacts.get_cluster_artifact_store()
+        artifact_store = gridengine.client().artifact_store
         return _PACKAGING_ROUTER(
             packageable.executable_spec, packageable, artifact_store
         )
 
     def package_slurm(executable_spec: executors.SlurmSpec):
-        artifact_store = artifacts.get_cluster_artifact_store()
+        artifact_store = slurm.client().artifact_store
         return _PACKAGING_ROUTER(
             packageable.executable_spec, packageable, artifact_store
         )

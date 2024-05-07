@@ -8,6 +8,7 @@ import shutil
 import subprocess
 from typing import Optional
 
+import fsspec
 from absl import logging
 
 from lxm3 import xm
@@ -95,6 +96,10 @@ class LocalClient:
         self._settings = settings
         self._artifact_store = artifact_store
 
+    @property
+    def artifact_store(self):
+        return self._artifact_store
+
     def launch(self, job_name: str, job: job_script_builder.JobType):
         job_name = re.sub("\\W", "_", job_name)
 
@@ -138,8 +143,12 @@ class LocalClient:
 
 @functools.lru_cache()
 def client() -> LocalClient:
+    project = config_lib.default().project()
     local_settings = config_lib.default().local_settings()
-    artifact_store = artifacts.get_local_artifact_store()
+
+    filesystem = fsspec.filesystem("file")
+    storage_root = os.path.abspath(os.path.expanduser(local_settings.storage_root))
+    artifact_store = artifacts.ArtifactStore(filesystem, storage_root, project=project)
     return LocalClient(local_settings, artifact_store)
 
 

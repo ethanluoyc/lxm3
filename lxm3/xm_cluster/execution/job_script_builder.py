@@ -6,9 +6,12 @@ import textwrap
 from typing import Dict, Generic, List, Optional, TypeVar, Union, cast
 
 import attr
+import fsspec
+from fsspec.implementations import sftp
 
 from lxm3 import xm
 from lxm3.xm_cluster import array_job
+from lxm3.xm_cluster import artifacts
 from lxm3.xm_cluster import config as config_lib
 from lxm3.xm_cluster import executables
 from lxm3.xm_cluster import executors
@@ -417,3 +420,23 @@ def flatten_job(
         return jobs  # type: ignore
     else:
         raise NotImplementedError()
+
+
+def create_artifact_store(project, settings):
+    project = config_lib.default().project()
+    settings = config_lib.default().cluster_settings()
+    hostname = settings.hostname
+    storage_root = settings.storage_root
+    user = settings.user
+    ssh_config = settings.ssh_config
+
+    if hostname is None:
+        filesystem = fsspec.filesystem("file")
+        storage_root = os.path.abspath(os.path.expanduser(storage_root))
+    else:
+        filesystem = sftp.SFTPFileSystem(host=hostname, username=user, **ssh_config)
+        storage_root = filesystem.ftp.normalize(storage_root)
+
+    return artifacts.ArtifactStore(
+        filesystem, staging_directory=storage_root, project=project
+    )
