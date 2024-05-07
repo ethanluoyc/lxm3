@@ -1,7 +1,4 @@
-import contextlib
 import os
-import shutil
-import subprocess
 import tempfile
 from typing import Any, Sequence
 
@@ -24,7 +21,7 @@ from lxm3.xm_cluster import executors
 from lxm3.xm_cluster.execution import gridengine
 from lxm3.xm_cluster.execution import local
 from lxm3.xm_cluster.execution import slurm
-from lxm3.xm_cluster.packaging import build_archive
+from lxm3.xm_cluster.packaging import create_archive
 
 _IMAGE_CACHE_DIR = os.path.join(appdirs.user_cache_dir("lxm3"), "image_cache")
 
@@ -71,9 +68,10 @@ def _package_python_package(
     artifact_store: artifacts.ArtifactStore,
 ):
     with tempfile.TemporaryDirectory() as staging:
-        archive_name = build_archive.create_python_archive(staging, py_package)
+        entrypoint_cmd, archive_name = create_archive.create_python_archive(
+            staging, py_package
+        )
         local_archive_path = os.path.join(staging, archive_name)
-        entrypoint_cmd = build_archive.ENTRYPOINT_SCRIPT
         push_archive_name = os.path.basename(local_archive_path)
         deployed_archive_path = _transfer_file_with_progress(
             artifact_store, local_archive_path, archive_path(push_archive_name)
@@ -88,63 +86,21 @@ def _package_python_package(
     )
 
 
-@contextlib.contextmanager
-def _chdir(directory):
-    cwd = os.getcwd()
-    os.chdir(directory)
-    yield
-    os.chdir(cwd)
-
-
 def _package_pex_binary(
     spec: cluster_executable_specs.PexBinary,
     packageable: xm.Packageable,
     artifact_store: artifacts.ArtifactStore,
 ):
-    pex_executable = shutil.which("pex")
-    pex_name = f"{spec.name}.pex"
-
-    assert pex_executable is not None, "pex executable not found"
     with tempfile.TemporaryDirectory() as staging:
-        install_dir = os.path.join(staging, "install")
-        pex_path = os.path.join(install_dir, pex_name)
-        with _chdir(spec.path):
-            pex_options = []
-            for pkg in spec.packages:
-                pex_options.extend(["--package", pkg])
-            for pkg in spec.modules:
-                pex_options.extend(["--module", pkg])
-            pex_options.extend(["--inherit-path=fallback"])
-            pex_options.extend(["--entry-point", spec.entrypoint.module_name])
-            pex_options.extend(["--runtime-pex-root=./.pex"])
-            with console.status(f"Creating pex {pex_name}"):
-                pex_cmd = [pex_executable, "-o", pex_path, *pex_options]
-                console.info(f"Running pex command: {' '.join(pex_cmd)}")
-                subprocess.run(pex_cmd, check=True)
-
-            # Add resources to the archive
-            for resource in spec.dependencies:
-                for src, dst in resource.files:
-                    target_file = os.path.join(install_dir, dst)
-                    if not os.path.exists(os.path.dirname(target_file)):
-                        os.makedirs(os.path.dirname(target_file))
-                    if not os.path.exists(target_file):
-                        shutil.copy(src, target_file)
-                    else:
-                        raise ValueError(
-                            "Additional resource overwrites existing file: %s", src
-                        )
-
-            local_archive_path = shutil.make_archive(
-                os.path.join(staging, spec.name), "zip", install_dir
-            )
-            push_archive_name = os.path.basename(local_archive_path)
-            deployed_archive_path = _transfer_file_with_progress(
-                artifact_store, local_archive_path, archive_path(push_archive_name)
-            )
+        entrypoint, archive_name = create_archive.create_pex_archive(staging, spec)
+        local_archive_path = os.path.join(staging, archive_name)
+        push_archive_name = os.path.basename(local_archive_path)
+        deployed_archive_path = _transfer_file_with_progress(
+            artifact_store, local_archive_path, archive_path(push_archive_name)
+        )
 
     return cluster_executables.AppBundle(
-        entrypoint_command=f"./{pex_name}",
+        entrypoint_command=entrypoint,
         resource_uri=deployed_archive_path,
         name=spec.name,
         args=packageable.args,
@@ -158,7 +114,7 @@ def _package_universal_package(
     artifact_store: artifacts.ArtifactStore,
 ):
     with tempfile.TemporaryDirectory() as staging:
-        archive_name = build_archive.create_universal_archive(
+        entrypoint, archive_name = create_archive.create_universal_archive(
             staging, universal_package
         )
         local_archive_path = os.path.join(staging, os.path.basename(archive_name))
@@ -168,7 +124,7 @@ def _package_universal_package(
         )
 
     return cluster_executables.AppBundle(
-        entrypoint_command=" ".join(universal_package.entrypoint),
+        entrypoint_command=entrypoint,
         resource_uri=deployed_archive_path,
         name=universal_package.name,
         args=packageable.args,
@@ -217,15 +173,9 @@ def _package_python_container(
     return _package_singularity_container(spec, packageable, artifact_store)
 
 
-def _package_singularity_container(
-    container: cluster_executable_specs.SingularityContainer,
-    packageable: xm.Packageable,
-    artifact_store: artifacts.ArtifactStore,
-):
-    executable = _PACKAGING_ROUTER(container.entrypoint, packageable, artifact_store)
-
-    singularity_image = container.image_path
-
+def _maybe_push_singularity_image(
+    singularity_image: str, artifact_store: artifacts.ArtifactStore
+) -> str:
     transport, _ = singularity.uri.split(singularity_image)
     # TODO(yl): Add support for other transports.
     # TODO(yl): think about keeping multiple versions of the container in the storage.
@@ -235,9 +185,9 @@ def _package_singularity_container(
             artifact_store.filesystem, fsspec.implementations.local.LocalFileSystem
         ):
             # Do not copy SIF image if executor is local
-            deploy_container_path = os.path.realpath(singularity_image)
+            return os.path.realpath(singularity_image)
         else:
-            deploy_container_path = _transfer_file_with_progress(
+            return _transfer_file_with_progress(
                 artifact_store,
                 singularity_image,
                 singularity_image_path(push_image_name),
@@ -247,7 +197,7 @@ def _package_singularity_container(
             singularity_image, cache_dir=_IMAGE_CACHE_DIR
         )
         push_image_name = singularity.uri.filename(singularity_image, "sif")
-        deploy_container_path = _transfer_file_with_progress(
+        return _transfer_file_with_progress(
             artifact_store,
             cache_image_info.blob_path,
             singularity_image_path(push_image_name),
@@ -255,8 +205,18 @@ def _package_singularity_container(
     else:
         # For other transports, just use the image as is for now.
         # TODO(yl): Consider adding support for specifying pulling behavior.
-        deploy_container_path = singularity_image
+        return singularity_image
 
+
+def _package_singularity_container(
+    container: cluster_executable_specs.SingularityContainer,
+    packageable: xm.Packageable,
+    artifact_store: artifacts.ArtifactStore,
+):
+    executable = _PACKAGING_ROUTER(container.entrypoint, packageable, artifact_store)
+    deploy_container_path = _maybe_push_singularity_image(
+        container.image_path, artifact_store
+    )
     executable.container_image = cluster_executables.ContainerImage(
         name=deploy_container_path,
         image_type=cluster_executables.ContainerImageType.SINGULARITY,
@@ -302,30 +262,24 @@ _PACKAGING_ROUTER = pattern_matching.match(
 )
 
 
+def _get_artifact_store(executor_spec: xm.ExecutorSpec) -> artifacts.ArtifactStore:
+    def local_store(executor_spec: executors.LocalSpec):
+        return local.client().artifact_store
+
+    def gridengine_store(executor_spec: executors.GridEngineSpec):
+        return gridengine.client().artifact_store
+
+    def slurm_store(executor_spec: executors.SlurmSpec):
+        return slurm.client().artifact_store
+
+    return pattern_matching.match(local_store, gridengine_store, slurm_store)(
+        executor_spec
+    )
+
+
 def packaging_router(packageable: xm.Packageable):
-    def package_local(executable_spec: executors.LocalSpec):
-        artifact_store = local.client().artifact_store
-        return _PACKAGING_ROUTER(
-            packageable.executable_spec, packageable, artifact_store
-        )
-
-    def package_gridengine(executable_spec: executors.GridEngineSpec):
-        artifact_store = gridengine.client().artifact_store
-        return _PACKAGING_ROUTER(
-            packageable.executable_spec, packageable, artifact_store
-        )
-
-    def package_slurm(executable_spec: executors.SlurmSpec):
-        artifact_store = slurm.client().artifact_store
-        return _PACKAGING_ROUTER(
-            packageable.executable_spec, packageable, artifact_store
-        )
-
-    return pattern_matching.match(
-        package_local,
-        package_gridengine,
-        package_slurm,
-    )(packageable.executor_spec)
+    artifact_store = _get_artifact_store(packageable.executor_spec)
+    return _PACKAGING_ROUTER(packageable.executable_spec, packageable, artifact_store)
 
 
 def package(packageables: Sequence[xm.Packageable]):
