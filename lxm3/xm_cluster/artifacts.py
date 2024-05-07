@@ -107,7 +107,7 @@ class ArtifactStore:
         local_stat = os.stat(lpath)
         local_size = local_stat.st_size
         local_mtime = datetime.datetime.fromtimestamp(
-            local_stat.st_atime, tz=datetime.timezone.utc
+            local_stat.st_mtime, tz=datetime.timezone.utc
         )
         remote_file_info = self.get_file_info(rpath)
 
