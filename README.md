@@ -34,7 +34,6 @@ storage location for the local executor.
 Create a configuration file at `$XDG_CONFIG_HOME/lxm3/config.toml` (defaults to `~/.config/lxm3/config.toml`) with the following content:
 
 ```toml
-project = "" # Optional project name
 # Configuration for running in local mode.
 [local]
 [local.storage]

@@ -226,18 +226,25 @@ def _load_vcsinfo() -> Optional[vcsinfo.VCS]:
     return vcs
 
 
-def create_experiment(experiment_title: str) -> ClusterExperiment:
+def create_experiment(
+    experiment_title: str, project: Optional[str] = None
+) -> ClusterExperiment:
     """Create a LXM3 experiment backed by the xm_cluster backend.
     Args:
         experiment_title: Title of the experiment.
-        config: Optional config object to use. If set, override
-            the configuration loaded from the config file.
+        project: project that the experiment is launched in.
+            If not set, a project name will be automatically deduced
+            from the environment.
+
     """
     config = config_lib.default()
-    vcs = _load_vcsinfo()
 
-    if not config.project() and vcs is not None:
-        config.set_project(vcs.name)
+    if project:
+        config.set_project(project)
+    else:
+        vcs = _load_vcsinfo()
+        if not config.project() and vcs is not None:
+            config.set_project(vcs.name)
 
     return ClusterExperiment(experiment_title, vcs=vcs)
 
