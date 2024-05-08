@@ -1,6 +1,6 @@
 import functools
 import os
-from typing import Any, Optional, Protocol
+from typing import Any, Optional
 
 import appdirs
 import tomlkit
@@ -12,10 +12,7 @@ LXM_CONFIG = flags.DEFINE_string(
 )
 
 
-class ExecutionSettings(Protocol): ...
-
-
-class LocalSettings(ExecutionSettings):
+class LocalSettings:
     def __init__(self, data=None) -> None:
         self._data = data or {}
 
@@ -27,7 +24,7 @@ class LocalSettings(ExecutionSettings):
         return self._data["storage"]["staging"]
 
 
-class ClusterSettings(ExecutionSettings):
+class ClusterSettings:
     def __init__(self, data=None) -> None:
         self._data = data or {}
 

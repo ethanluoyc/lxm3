@@ -30,12 +30,6 @@ class JobScriptBuilder(abc.ABC, Generic[ExecutorType]):
     JOB_PARAM_NAME: str = "job-param.sh"
     CONTAINER_JOB_PARAM_PATH: str = f"/tmp/{JOB_PARAM_NAME}"
 
-    def __init__(
-        self,
-        settings: Optional[config_lib.ExecutionSettings] = None,
-    ) -> None:
-        self._settings = settings
-
     @classmethod
     @abc.abstractmethod
     def _create_job_script_header(

@@ -112,8 +112,7 @@ class GridEngineClient:
         job_log_dir = job_script_builder.job_log_path(job_name)
         self._artifact_store.ensure_dir(job_log_dir)
         job_log_dir = self._artifact_store.normalize_path(job_log_dir)
-
-        builder = self.builder_cls(self._settings)
+        builder = self.builder_cls()
         job_script_content = builder.build(job, job_name, job_log_dir)
         job_script_path = self._artifact_store.put_text(
             job_script_content, job_script_builder.job_script_path(job_name)
