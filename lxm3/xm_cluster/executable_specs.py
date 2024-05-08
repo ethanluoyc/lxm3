@@ -250,9 +250,21 @@ class SingularityContainer(job_blocks.ExecutableSpec):
 
     Attributes:
         entrypoint: Another ExcutableSpec.
-        image_path: Path to a Singularity image.
-            If it's a relative path, this will be resolved relative
-            to the launcher's working directory.
+        image_path: Path to a Singularity/Apptainer image.
+            The following image URLs are supported:
+
+            1. path to a local SIF image. e.g., path/to/image.sif
+
+               Note: If it's a relative path, this will be resolved relative
+               to the launcher's working directory.
+
+            2. image URI to a container image stored in the local
+               docker daemon. e.g., docker-daemon://python:3.10
+
+               The image will be converted and cached as a singularity SIF image.
+
+            3. Any other URIs supported by Singularity/Apptainer.
+               The image URI will be passed to singularity as is.
     """
 
     entrypoint: Union[UniversalPackage, PythonPackage, PexBinary]
