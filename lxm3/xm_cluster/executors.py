@@ -33,8 +33,8 @@ class SingularityOptions:
         extra_options: Extra commandline options to pass to singularity.
 
           When using the ``extra_options``, be aware of the following:
-            1. lxm3 currently probably won't likely work with
-               ``--contain``, ``--pwd`` and ``-wd``,
+            1. You should not set a working directory as LXM3 configures those
+            for the executable.
             2. You don't have to pass ``--nv`` for GPU jobs,
                lxm3 will do it for you.
     """
@@ -48,15 +48,8 @@ class DockerOptions:
     """Options for singularity container.
 
     Args:
-        bind: Mapping of the form ``{src: dst}``.
-        User-bind path specification of the form ``-B <src>:<dst>``.
+        volumes: Bind-mounted volumes used by the docker runtime.
         extra_options: Extra commandline options to pass to singularity.
-
-          When using the ``extra_options``, be aware of the following:
-            1. lxm3 currently probably won't likely work with
-               ``--contain``, ``--pwd`` and ``-wd``,
-            2. You don't have to pass ``--nv`` for GPU jobs,
-               lxm3 will do it for you.
     """
 
     volumes: Dict[str, str] = attr.Factory(dict)

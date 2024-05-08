@@ -264,6 +264,7 @@ class SingularityContainer(job_blocks.ExecutableSpec):
                The image will be converted and cached as a singularity SIF image.
 
             3. Any other URIs supported by Singularity/Apptainer.
+               e.g., docker://python:3.10.
                The image URI will be passed to singularity as is.
     """
 
