@@ -2,7 +2,6 @@ import os
 import tempfile
 from typing import Any, Sequence
 
-import appdirs
 import fsspec
 import fsspec.implementations
 import fsspec.implementations.local
@@ -14,6 +13,7 @@ from lxm3._vendor.xmanager.xm import pattern_matching
 from lxm3.docker import build_image
 from lxm3.singularity import image_cache
 from lxm3.xm_cluster import artifacts
+from lxm3.xm_cluster import config
 from lxm3.xm_cluster import console
 from lxm3.xm_cluster import executable_specs as cluster_executable_specs
 from lxm3.xm_cluster import executables as cluster_executables
@@ -22,8 +22,6 @@ from lxm3.xm_cluster.execution import gridengine
 from lxm3.xm_cluster.execution import local
 from lxm3.xm_cluster.execution import slurm
 from lxm3.xm_cluster.packaging import create_archive
-
-_IMAGE_CACHE_DIR = os.path.join(appdirs.user_cache_dir("lxm3"), "image_cache")
 
 
 def singularity_image_path(image_name: str):
@@ -177,13 +175,14 @@ def _maybe_push_singularity_image(
     singularity_image: str, artifact_store: artifacts.ArtifactStore
 ) -> str:
     transport, _ = singularity.uri.split(singularity_image)
+    is_local_fs = isinstance(
+        artifact_store.filesystem, fsspec.implementations.local.LocalFileSystem
+    )
     # TODO(yl): Add support for other transports.
     # TODO(yl): think about keeping multiple versions of the container in the storage.
     if not transport:
         push_image_name = os.path.basename(singularity_image)
-        if isinstance(
-            artifact_store.filesystem, fsspec.implementations.local.LocalFileSystem
-        ):
+        if is_local_fs:
             # Do not copy SIF image if executor is local
             return os.path.realpath(singularity_image)
         else:
@@ -193,15 +192,20 @@ def _maybe_push_singularity_image(
                 singularity_image_path(push_image_name),
             )
     elif transport == "docker-daemon":
+        storage_root = config.default().local_settings().storage_root
+        image_cache_dir = os.path.join(storage_root, "image_cache")
         cache_image_info = image_cache.get_cached_image(
-            singularity_image, cache_dir=_IMAGE_CACHE_DIR
+            singularity_image, cache_dir=image_cache_dir
         )
         push_image_name = singularity.uri.filename(singularity_image, "sif")
-        return _transfer_file_with_progress(
-            artifact_store,
-            cache_image_info.blob_path,
-            singularity_image_path(push_image_name),
-        )
+        if is_local_fs:
+            return os.path.realpath(cache_image_info.path)
+        else:
+            return _transfer_file_with_progress(
+                artifact_store,
+                cache_image_info.path,
+                singularity_image_path(push_image_name),
+            )
     else:
         # For other transports, just use the image as is for now.
         # TODO(yl): Consider adding support for specifying pulling behavior.
