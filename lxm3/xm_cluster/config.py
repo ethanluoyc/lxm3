@@ -12,17 +12,7 @@ LXM_CONFIG = flags.DEFINE_string(
 )
 
 
-class SingularitySettings:
-    def __init__(self, data) -> None:
-        self._data = data
-
-    def __repr__(self) -> str:
-        return repr(self._data)
-
-
-class ExecutionSettings(Protocol):
-    @property
-    def singularity(self) -> SingularitySettings: ...
+class ExecutionSettings(Protocol): ...
 
 
 class LocalSettings(ExecutionSettings):
@@ -35,10 +25,6 @@ class LocalSettings(ExecutionSettings):
     @property
     def storage_root(self) -> str:
         return self._data["storage"]["staging"]
-
-    @property
-    def singularity(self) -> SingularitySettings:
-        return SingularitySettings(self._data.get("singularity", {}))
 
 
 class ClusterSettings(ExecutionSettings):
@@ -78,10 +64,6 @@ class ClusterSettings(ExecutionSettings):
             connect_kwargs["password"] = password
 
         return connect_kwargs
-
-    @property
-    def singularity(self) -> SingularitySettings:
-        return SingularitySettings(self._data.get("singularity", {}))
 
 
 class Config:
