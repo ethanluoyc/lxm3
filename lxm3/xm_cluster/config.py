@@ -13,8 +13,8 @@ LXM_CONFIG = flags.DEFINE_string(
 
 
 class LocalSettings:
-    def __init__(self, data=None) -> None:
-        self._data = data or {}
+    def __init__(self, data) -> None:
+        self._data = data
 
     def __repr__(self) -> str:
         return repr(self._data)
@@ -25,8 +25,8 @@ class LocalSettings:
 
 
 class ClusterSettings:
-    def __init__(self, data=None) -> None:
-        self._data = data or {}
+    def __init__(self, data) -> None:
+        self._data = data
 
     def __repr__(self) -> str:
         return repr(self._data)
