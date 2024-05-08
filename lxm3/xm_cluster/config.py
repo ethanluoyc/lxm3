@@ -21,6 +21,8 @@ class LocalSettings:
 
     @property
     def storage_root(self) -> str:
+        if "storage" not in self._data:
+            self._data["storage"] = {"staging": os.path.join(os.getcwd(), ".lxm")}
         return self._data["storage"]["staging"]
 
 
@@ -33,6 +35,8 @@ class ClusterSettings:
 
     @property
     def storage_root(self):
+        if "storage" not in self._data:
+            self._data["storage"] = {"staging": "lxm3-staging"}
         return self._data["storage"]["staging"]
 
     @property
@@ -64,8 +68,9 @@ class ClusterSettings:
 
 
 class Config:
-    def __init__(self, data) -> None:
+    def __init__(self, data, project=None) -> None:
         self._data = data
+        self._project = project
 
     def __repr__(self) -> Any:
         return repr(self._data)
@@ -85,21 +90,28 @@ class Config:
         project = os.environ.get("LXM_PROJECT", None)
         if project is not None:
             return project
-        return self._data.get("project", None)
+        return self._project
 
     def set_project(self, project):
-        self._data["project"] = project
+        self._project = project
 
     def local_settings(self) -> LocalSettings:
+        if "local" not in self._data:
+            self._data["local"] = {}
         return LocalSettings(self._data["local"])
 
     def default_cluster(self) -> str:
+        if "clusters" not in self._data:
+            self._data["clusters"] = []
         cluster = os.environ.get("LXM_CLUSTER", None)
         if cluster is None:
             if not self._data.get("clusters", None):
                 raise ValueError(
-                    "No cluster has been configured. You should create a configuration file "
-                    "in order to use the cluster execution backends."
+                    "No cluster configuration found.\nYou should create a configuration file "
+                    "in order to use the cluster execution backends.\n"
+                    "Refer to\n\n"
+                    "  https://github.com/ethanluoyc/lxm3/tree/main?tab=readme-ov-file#set-up-configuration-file-required\n\n"
+                    "for instructions on how to create a configuration file."
                 )
             cluster = self._data["clusters"][0]["name"]
         return cluster
@@ -146,7 +158,7 @@ def default() -> Config:
         logging.debug("Loading config from %s", cwd_path)
         return Config.from_file(user_config_path)
     else:
-        logging.info(
-            "Failed to load configuration. Creating a default configuration for local execution."
+        print(
+            "Configuration file not found. Using a default configuration for local execution."
         )
-        return Config.default()
+        return Config({}, project=None)

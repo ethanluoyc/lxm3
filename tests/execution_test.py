@@ -140,7 +140,7 @@ class LocalExecutionTest(parameterized.TestCase):
         artifact = artifacts.ArtifactStore(
             fsspec.filesystem("local"), deploy_dir.full_path
         )
-        settings = config.LocalSettings()
+        settings = config.LocalSettings({})
         client = local.LocalClient(settings, artifact)
         with mock.patch.object(subprocess, "run"):
             client.launch("test_job", job)
@@ -328,7 +328,7 @@ class GridEngineExecutionTest(parameterized.TestCase):
         artifact = artifacts.ArtifactStore(
             fsspec.filesystem("local"), deploy_dir.full_path
         )
-        settings = config.ClusterSettings()
+        settings = config.ClusterSettings({})
         client = gridengine.GridEngineClient(settings, artifact)
         with mock.patch.object(
             gridengine_cluster.GridEngineCluster, "launch"
@@ -397,7 +397,7 @@ class SlurmExecutionTest(parameterized.TestCase):
         artifact = artifacts.ArtifactStore(
             fsspec.filesystem("local"), deploy_dir.full_path
         )
-        settings = config.ClusterSettings()
+        settings = config.ClusterSettings({})
         client = slurm.SlurmClient(settings, artifact)
         with mock.patch.object(slurm_cluster.SlurmCluster, "launch") as mock_launch:
             mock_launch.return_value = slurm_cluster.parse_job_id("job 1")
