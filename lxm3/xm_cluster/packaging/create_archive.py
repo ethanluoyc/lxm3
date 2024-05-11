@@ -159,6 +159,7 @@ def create_pex_archive(
     archive_name = f"{spec.name}-{version}"
     pex_name = f"{spec.name}.pex"
     install_dir = os.path.join(staging, "install")
+    os.makedirs(install_dir, exist_ok=True)
     pex_path = os.path.join(install_dir, pex_name)
 
     pex_options = []
