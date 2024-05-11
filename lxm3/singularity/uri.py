@@ -28,7 +28,7 @@ _VALID_URIS: dict[str, bool] = {
 
 # is_valid returns whether or not the given source is valid
 def is_valid(source: str) -> tuple[bool, Optional[str]]:
-    u = source.split(":", 2)
+    u = source.split(":", 1)
 
     if len(u) != 2:
         return False, f"invalid uri {source}"

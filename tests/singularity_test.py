@@ -50,6 +50,13 @@ class URITest(parameterized.TestCase):
         filename = singularity.uri.filename(build_spec, "sif")
         self.assertEqual(filename, "jax-cuda_latest.sif")
 
+        # Test without //
+        build_spec = "docker-daemon:jax-cuda:latest"
+        transport, ref = singularity.uri.split(build_spec)
+        self.assertEqual(transport, "docker-daemon")
+        filename = singularity.uri.filename(build_spec, "sif")
+        self.assertEqual(filename, "jax-cuda_latest.sif")
+
 
 if __name__ == "__main__":
     absltest.main()
